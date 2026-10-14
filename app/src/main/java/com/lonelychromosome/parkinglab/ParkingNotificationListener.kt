@@ -28,16 +28,26 @@ class ParkingNotificationListener : NotificationListenerService() {
         val matches = GateNotificationMatcher.isGateEntry(
             sbn.packageName, sbn.notification.extras)
         NotificationStore.notePhenikaa(this, matches)
-        if (matches && FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING) {
-            // The user already started BikeTrackingService in the foreground.
-            // Do not attempt to launch a new location FGS from a background listener.
-            try {
-                startService(Intent(this, BikeTrackingService::class.java)
-                    .setAction(BikeTrackingService.GATE))
-            } catch (_: Exception) {
-                // The running service can be missing if Android killed the app.
-                // No fabricated tracking success.
-            }
+        if (!matches || !FindMyBikeStore.withinWindow(this)) return
+        // Ignore notifications posted before this scheduled/manual waiting session.
+        if (sbn.postTime < FindMyBikeStore.waitingStartedWall(this) - 1_000L) return
+        if (!FindMyBikeStore.serviceReady(this)) {
+            ScheduledGateController.setEvent(this,
+                "Nhận xe vào nhưng Android chưa cho service nền hoạt động")
+            ScheduledGateController.notifyAction(this,
+                "Đã nhận thông báo xe vào",
+                "Chạm để mở BPA và bắt đầu tracking GPS.")
+            return
+        }
+        try {
+            // Send to the ALREADY-RUNNING location foreground service.
+            startService(Intent(this, BikeTrackingService::class.java)
+                .setAction(BikeTrackingService.GATE))
+        } catch (e: Exception) {
+            ScheduledGateController.setEvent(this,
+                "Không thể chuyển thông báo tới GPS: " + e.javaClass.simpleName)
+            ScheduledGateController.notifyAction(this,
+                "Find My Bike cần mở app", "Thông báo xe vào đã đến; chạm để bật GPS.")
         }
     }
 }

@@ -1,7 +1,7 @@
 name: Android Debug APK
 on:
   push:
-    branches: [main, feature/find-my-bike-v0.3]
+    branches: [main, feature/find-my-bike-v0.3, feature/find-my-bike-scheduled-v0.4]
   workflow_dispatch:
 jobs:
   build:
@@ -30,6 +30,6 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: BPA-Parking-Lab-FindMyBike-v0.3.1
+          name: BPA-FindMyBike-Scheduled-v0.4
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

@@ -34,11 +34,11 @@ object FakeGateTest {
     }
 
     fun noteNoPush(c: Context) {
-        report(c, "Không phát thông báo. Bộ chờ tự chuyển sang thủ công sau 10 giây.")
+        report(c, "Không phát thông báo. Bộ chờ tự chuyển sang thủ công sau thời gian đã chọn.")
     }
 
     fun noteScheduled(c: Context) {
-        report(c, "Đã đặt lịch FAKE xe vào sau 12 giây. Nếu hết hạn chờ, GPS không được bật.")
+        report(c, "Đã đặt lịch FAKE xe vào sau 12 giây; kết quả phụ thuộc thời hạn chờ.")
     }
 
     fun emit(c: Context, kind: Kind): String {
@@ -78,9 +78,9 @@ object FakeGateTest {
         val matched = GateNotificationMatcher.isGateEntry(
             GateNotificationMatcher.PHENIKAA_PACKAGE, notification.extras)
         val modeBefore = FindMyBikeStore.mode(c)
-        val withinWindow = SystemClock.elapsedRealtime() -
-            FindMyBikeStore.waitingSince(c) <= 10_000L
-        val accepted = matched && modeBefore == FindMyBikeStore.WAITING && withinWindow
+        val withinWindow = FindMyBikeStore.withinWindow(c)
+        val accepted = matched && modeBefore == FindMyBikeStore.WAITING &&
+            withinWindow && FindMyBikeStore.serviceReady(c)
         if (accepted) {
             // We do not spoof Android's source package. Test input enters at the
             // parser result boundary, with identical service action to a real listener.
@@ -90,7 +90,8 @@ object FakeGateTest {
         val result = when {
             accepted -> "KHỚP xe vào → yêu cầu bật tracking GPS"
             !matched -> "KHÔNG KHỚP xe vào → bỏ qua"
-            modeBefore == FindMyBikeStore.WAITING -> "ĐẾN TRỄ (quá 10 giây) → bỏ qua"
+            modeBefore == FindMyBikeStore.WAITING && !withinWindow -> "ĐẾN TRỄ (ngoài thời gian chờ) → bỏ qua"
+            modeBefore == FindMyBikeStore.WAITING -> "SERVICE CHƯA SẴN SÀNG → cần mở app"
             else -> "ĐÃ NHẬN nhưng trạng thái $modeBefore → không ghi đè"
         }
         report(c, result + if (postingGranted) " · đã đăng thông báo FAKE"

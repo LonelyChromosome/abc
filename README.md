@@ -1,6 +1,34 @@
-# BPA Parking Lab — Find My Bike v0.3.1
+# BPA Find My Bike — Scheduled test v0.4
 
-Android-native proof of concept in **LonelyChromosome/abc** (branch `feature/find-my-bike-v0.3`). Does not modify DemoF3.
+**Parallel Android build**: `com.lonelychromosome.parkinglab.scheduled` / **Parking Lab Scheduled**.
+Developed independently from the original v0.3.1 (`com.lonelychromosome.parkinglab`). No changes to DemoF3 or main.
+
+## New scheduled wait mode
+
+- In Parking Lab Scheduled, tap **Đặt lịch tự chờ thông báo quẹt thẻ**.
+- Choose any **future day and local time**.
+- Configure **notification waiting duration** in seconds, 10–14400 (default 600 seconds = 10 minutes).
+- Grant Notification Access for **Parking Lab Scheduled** (separate from the original app).
+- Grant location permission, **Allow all the time** location through Android application settings, POST_NOTIFICATIONS, and **Alarms & reminders / exact alarms** special access. Activity Recognition is advised to detect walking.
+- Tap **Đặt lịch chờ tự động**. No GPS is collected before an accepted entry notification.
+- At the scheduled time, an exact `AlarmManager` wakeup arms the notification wait and requests a foreground **location** service. This background start may be allowed due to the user-requested exact alarm, but automatic location service use requires background location permission on Android 14+ and may still be restricted by an OEM.
+- When a matching notification from `phx.smartschool.phenikaauniversity` arrives **during the configured wait**, the already-running service enables GPS and the full-route parking detection pipeline. Notifications posted before the waiting session are ignored.
+- If no valid push arrives before the deadline, the watch expires and notifies the user; **no automatic GPS start** occurs.
+- If Android prevents scheduled background service launch, show a notification to open Parking Lab Scheduled; the user can then choose manual tracking.
+- The original immediate 10-second wait and manual backup controls remain intact. Manual activation cancels a future scheduled alarm.
+- One-shot, not recurring. A pending future schedule is restored after reboot or app update when platform permission allows it.
+
+## Test scenarios
+
+1. Schedule 2 minutes ahead and set waiting duration 120 seconds. Lock the phone, let the alarm fire, then try the **fake entry** button while the wait is active. The fake panel is only an in-app synthetic test.
+2. Test real notification from Phenikaa Uni to validate end-to-end automatic GPS activation. Real payload wording remains unverified.
+3. Set waiting duration **30 seconds**: fake entry at ~12 seconds should be accepted. Repeat with 10 seconds and it should be rejected.
+4. Test no notification, exit notifications, duplicate entry, app removal from Recents, and lock screen.
+5. Confirm **entire GPS journey** is saved as a CSV in private app storage, with no 10-second truncation.
+
+**This is a separate experimental APK, not a promise of unattended Android 14/15 support until a real locked-screen field test passes.**
+
+## Original v0.3.1 functionality
 
 ## Behavior
 

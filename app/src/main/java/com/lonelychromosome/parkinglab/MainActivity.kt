@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     private lateinit var state: TextView
     private lateinit var countdown: TextView
     private lateinit var gpsStatus: TextView
+    private lateinit var scheduledState: TextView
     private lateinit var savedStatus: TextView
     private lateinit var listenerStatus: TextView
     private lateinit var logStatus: TextView
@@ -114,7 +115,7 @@ class MainActivity : Activity() {
             setBackgroundColor(pageBg)
         }
         content.addView(label("BETTER PHENIKAA · PARKING LAB", 12f, mint, true))
-        content.addView(label("Find My Bike", 30f, white, true), spacing(6))
+        content.addView(label("Find My Bike · Scheduled", 28f, white, true), spacing(6))
         content.addView(label("Phenikaa Uni kích hoạt · BPA xác định điểm đỗ · Google Maps dẫn đường",
             13f, muted), spacing(6))
 
@@ -137,7 +138,13 @@ class MainActivity : Activity() {
         content.addView(startBike, spacing(12))
         manual = action("Đánh dấu thủ công · bật tracking") { requestBikeStart(true) }
         content.addView(manual, spacing(8))
-         saveBike = action("Lưu vị trí dựng xe ngay") {
+        content.addView(label("HẸN GIỜ CHỜ XE VÀO", 12f, mint, true), spacing(20))
+        scheduledState = label("", 13f, muted)
+        content.addView(scheduledState, spacing(7))
+        content.addView(action("Đặt lịch tự chờ thông báo quẹt thẻ", true) {
+            startActivity(Intent(this, ScheduledSetupActivity::class.java))
+        }, spacing(9))
+        saveBike = action("Lưu vị trí dựng xe ngay") {
             startService(Intent(this, BikeTrackingService::class.java).setAction(BikeTrackingService.SAVE))
         }
         content.addView(saveBike, spacing(8))
@@ -181,7 +188,7 @@ class MainActivity : Activity() {
             FakeGateTest.emit(this, FakeGateTest.Kind.ENTRY)
             refresh()
         }, spacing(7))
-        content.addView(action("5 · FAKE ĐẾN MUỘN — gửi sau 12 giây") {
+        content.addView(action("5 · FAKE SAU 12 GIÂY — thử cửa sổ chờ") {
             tick.removeCallbacks(lateFake)
             FakeGateTest.noteScheduled(this)
             tick.postDelayed(lateFake, 12_000L)
@@ -285,6 +292,7 @@ class MainActivity : Activity() {
                          else BikeTrackingService.START
             if (action == BikeTrackingService.MANUAL &&
                 mode != FindMyBikeStore.WAITING && mode != FindMyBikeStore.NEEDS_MANUAL) return
+            if (action == BikeTrackingService.START) ScheduledGateController.cancel(this)
             startForegroundService(Intent(this, BikeTrackingService::class.java).setAction(action))
             refresh()
         } catch (ex: Exception) {
@@ -392,11 +400,14 @@ class MainActivity : Activity() {
         val current = FindMyBikeStore.mode(this)
         state.text = FindMyBikeStore.describe(this)
         countdown.text = if (current == FindMyBikeStore.WAITING) {
-            val remaining = (10_000L -
-                (android.os.SystemClock.elapsedRealtime() - FindMyBikeStore.waitingSince(this)))
-                .coerceAtLeast(0L)
+            val remaining = FindMyBikeStore.remainingWaitMs(this)
             "Đang chờ: " + ((remaining + 999L) / 1000L) + " giây"
         } else "Nguồn: Phenikaa Uni · dự phòng: đánh dấu thủ công"
+        val scheduledAt = ScheduledGateController.time(this)
+        scheduledState.text = if (scheduledAt > System.currentTimeMillis()) {
+            "Sẽ bật chờ lúc " + ScheduledGateController.format(scheduledAt) +
+                " · chờ tối đa " + ScheduledGateController.waitSeconds(this) + " giây"
+        } else ScheduledGateController.lastEvent(this)
         val last = FindMyBikeStore.lastFix(this)
         gpsStatus.text = if (current == FindMyBikeStore.TRACKING) {
             if (last == null) "GPS đang tìm tọa độ đầu tiên..."

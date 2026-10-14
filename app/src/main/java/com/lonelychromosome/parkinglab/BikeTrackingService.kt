@@ -29,6 +29,7 @@ import com.google.android.gms.location.Priority
 class BikeTrackingService : Service(), SensorEventListener {
     companion object {
         const val START = "bike.START"
+        const val START_SCHEDULED = "bike.START_SCHEDULED"
         const val GATE = "bike.GATE"
         const val MANUAL = "bike.MANUAL"
         const val SAVE = "bike.SAVE"
@@ -57,7 +58,12 @@ class BikeTrackingService : Service(), SensorEventListener {
 
     private val timeout = Runnable {
         if (FindMyBikeStore.mode(this) != FindMyBikeStore.WAITING) return@Runnable
+        if (FindMyBikeStore.remainingWaitMs(this) > 0L) {
+            handler.postDelayed(timeout, FindMyBikeStore.remainingWaitMs(this))
+            return@Runnable
+        }
         FindMyBikeStore.needManual(this)
+        ScheduledGateController.cancelExpire(this)
         getSystemService(NotificationManager::class.java).notify(MANUAL_ID,
             alert("Chưa nhận thông báo vào cổng",
                 "Bấm để đánh dấu thủ công và bắt đầu theo dõi xe.", true))
@@ -88,17 +94,25 @@ class BikeTrackingService : Service(), SensorEventListener {
                     ensureLocation()
                     return START_STICKY
                 }
-                showForeground("Chờ Phenikaa Uni · tối đa 10 giây")
                 FindMyBikeStore.startWaiting(this)
-                handler.removeCallbacks(timeout)
-                handler.postDelayed(timeout, WINDOW_MS)
+                showForeground("Chờ Phenikaa Uni · 10 giây")
+                scheduleWaitingTimeout()
+                return START_STICKY
+            }
+            START_SCHEDULED -> {
+                if (!FindMyBikeStore.withinWindow(this)) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                showForeground("Lịch đã tới · đang chờ thông báo quẹt thẻ")
+                scheduleWaitingTimeout()
                 return START_STICKY
             }
             GATE -> {
                 // FCM notifications can arrive late; never replace a manual session.
-                if (FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING &&
-                    SystemClock.elapsedRealtime() - FindMyBikeStore.waitingSince(this) <= WINDOW_MS) {
+                if (FindMyBikeStore.withinWindow(this) && hasForeground) {
                     handler.removeCallbacks(timeout)
+                    ScheduledGateController.cancelExpire(this)
                     showForeground("Đã nhận tín hiệu vào cổng · đang theo dõi")
                     beginTracking()
                 }
@@ -107,6 +121,7 @@ class BikeTrackingService : Service(), SensorEventListener {
                 if (FindMyBikeStore.mode(this) == FindMyBikeStore.NEEDS_MANUAL ||
                     FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING) {
                     handler.removeCallbacks(timeout)
+                    ScheduledGateController.cancelExpire(this)
                     showForeground("Theo dõi vị trí · kích hoạt thủ công")
                     beginTracking()
                     getSystemService(NotificationManager::class.java).cancel(MANUAL_ID)
@@ -123,6 +138,7 @@ class BikeTrackingService : Service(), SensorEventListener {
             }
             CANCEL -> {
                 RouteStore.abandon(this)
+                ScheduledGateController.cancelExpire(this)
                 FindMyBikeStore.reset(this)
                 endWithoutSaving(true)
                 return START_NOT_STICKY
@@ -133,11 +149,13 @@ class BikeTrackingService : Service(), SensorEventListener {
                     showForeground("Đang khôi phục theo dõi")
                     ensureLocation()
                 } else if (FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING) {
-                    val remaining = WINDOW_MS -
-                        (SystemClock.elapsedRealtime() - FindMyBikeStore.waitingSince(this))
-                    showForeground("Chờ Phenikaa Uni")
-                    handler.removeCallbacks(timeout)
-                    handler.postDelayed(timeout, remaining.coerceAtLeast(0L))
+                    if (FindMyBikeStore.remainingWaitMs(this) <= 0L) {
+                        FindMyBikeStore.needManual(this)
+                        stopSelf()
+                    } else {
+                        showForeground("Chờ Phenikaa Uni")
+                        scheduleWaitingTimeout()
+                    }
                 } else {
                     stopSelf()
                 }
@@ -163,6 +181,12 @@ class BikeTrackingService : Service(), SensorEventListener {
             startForeground(FGS_ID, n)
         }
         hasForeground = true
+        FindMyBikeStore.setServiceReady(this, true)
+    }
+
+    private fun scheduleWaitingTimeout() {
+        handler.removeCallbacks(timeout)
+        handler.postDelayed(timeout, FindMyBikeStore.remainingWaitMs(this).coerceAtLeast(0L))
     }
 
     private fun openApp(request: Int, manual: Boolean): PendingIntent {
@@ -183,6 +207,7 @@ class BikeTrackingService : Service(), SensorEventListener {
             .setCategory(Notification.CATEGORY_REMINDER).build()
 
     private fun beginTracking() {
+        ScheduledGateController.cancelExpire(this)
         RouteStore.begin(this)
         FindMyBikeStore.track(this)
         lastLocation = null
@@ -278,6 +303,8 @@ class BikeTrackingService : Service(), SensorEventListener {
 
     private fun endWithoutSaving(removeAlert: Boolean) {
         handler.removeCallbacks(timeout)
+        ScheduledGateController.cancelExpire(this)
+        FindMyBikeStore.setServiceReady(this, false)
         if (receivingLocations) {
             fused.removeLocationUpdates(locationCallback)
             receivingLocations = false
@@ -296,6 +323,7 @@ class BikeTrackingService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         handler.removeCallbacks(timeout)
+        FindMyBikeStore.setServiceReady(this, false)
         if (receivingLocations) fused.removeLocationUpdates(locationCallback)
         if (registeredSteps) sensorManager.unregisterListener(this)
         super.onDestroy()

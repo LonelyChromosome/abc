@@ -16,9 +16,24 @@ object FindMyBikeStore {
 
     fun mode(context: Context): String = p(context).getString("mode", IDLE) ?: IDLE
     fun waitingSince(context: Context): Long = p(context).getLong("waiting_since", 0L)
-    fun startWaiting(context: Context) {
+    fun waitingDeadline(context: Context) = p(context).getLong("waiting_deadline", 0L)
+    fun waitingStartedWall(context: Context) = p(context).getLong("waiting_started_wall", 0L)
+    fun waitWindowMs(context: Context) = p(context).getLong("wait_window_ms", 10_000L)
+    fun remainingWaitMs(context: Context) = (waitingDeadline(context) - System.currentTimeMillis()).coerceAtLeast(0L)
+    fun withinWindow(context: Context) = mode(context) == WAITING &&
+        waitingSince(context) > 0L && remainingWaitMs(context) > 0L &&
+        SystemClock.elapsedRealtime() >= waitingSince(context)
+    fun serviceReady(context: Context) = p(context).getBoolean("service_ready", false)
+    fun setServiceReady(context: Context, ready: Boolean) {
+        p(context).edit().putBoolean("service_ready", ready).commit()
+    }
+    fun startWaiting(context: Context, waitMillis: Long = 10_000L) {
         p(context).edit().putString("mode", WAITING)
             .putLong("waiting_since", SystemClock.elapsedRealtime())
+            .putLong("waiting_started_wall", System.currentTimeMillis())
+            .putLong("wait_window_ms", waitMillis.coerceIn(10_000L, 14_400_000L))
+            .putLong("waiting_deadline", System.currentTimeMillis() + waitMillis.coerceIn(10_000L, 14_400_000L))
+            .putBoolean("service_ready", false)
             .remove("last_lat").remove("last_lon").commit()
     }
     fun needManual(context: Context) {
@@ -56,8 +71,8 @@ object FindMyBikeStore {
         p(context).edit().putString("mode", IDLE).remove("last_lat").remove("last_lon").commit()
     }
     fun describe(context: Context): String = when (mode(context)) {
-        WAITING -> "Đang chờ thông báo Phenikaa Uni tối đa 10 giây"
-        NEEDS_MANUAL -> "Hết 10 giây. Hãy chọn ĐÁNH DẤU THỦ CÔNG."
+        WAITING -> "Đang chờ thông báo Phenikaa Uni"
+        NEEDS_MANUAL -> "Hết thời gian chờ. Hãy chọn ĐÁNH DẤU THỦ CÔNG."
         TRACKING -> "Đang theo dõi. Dừng xe rồi đi bộ để tự lưu."
         SAVED -> "Đã lưu vị trí dựng xe"
         else -> "Chưa bắt đầu Find My Bike"
