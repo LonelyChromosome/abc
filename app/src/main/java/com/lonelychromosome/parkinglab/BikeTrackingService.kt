@@ -24,7 +24,6 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import java.util.ArrayDeque
 
 /** User-started location FGS; NOTIFICATION ACCESS never starts this service in the background. */
 class BikeTrackingService : Service(), SensorEventListener {
@@ -51,7 +50,6 @@ class BikeTrackingService : Service(), SensorEventListener {
     private var receivingLocations = false
     private var registeredSteps = false
     private var lastLocation: Location? = null
-    private val recent = ArrayDeque<Fix>()
     private var stopCandidate: Fix? = null
     private var stationarySince = 0L
     private var walkingSteps = 0
@@ -116,7 +114,7 @@ class BikeTrackingService : Service(), SensorEventListener {
             }
             SAVE -> {
                 if (FindMyBikeStore.mode(this) == FindMyBikeStore.TRACKING) {
-                    val fix = recent.lastOrNull() ?: FindMyBikeStore.lastFix(this)?.let {
+                    val fix = FindMyBikeStore.lastFix(this)?.let {
                         Fix(it.first, it.second, it.third, SystemClock.elapsedRealtime())
                     }
                     if (fix != null) saveFix(fix, "Thủ công")
@@ -124,6 +122,7 @@ class BikeTrackingService : Service(), SensorEventListener {
                 }
             }
             CANCEL -> {
+                RouteStore.abandon(this)
                 FindMyBikeStore.reset(this)
                 endWithoutSaving(true)
                 return START_NOT_STICKY
@@ -184,8 +183,8 @@ class BikeTrackingService : Service(), SensorEventListener {
             .setCategory(Notification.CATEGORY_REMINDER).build()
 
     private fun beginTracking() {
+        RouteStore.begin(this)
         FindMyBikeStore.track(this)
-        recent.clear()
         lastLocation = null
         stopCandidate = null
         stationarySince = 0L
@@ -225,9 +224,10 @@ class BikeTrackingService : Service(), SensorEventListener {
 
         val now = SystemClock.elapsedRealtime()
         val fix = Fix(location.latitude, location.longitude, location.accuracy, now)
-        recent.addLast(fix)
-        while (recent.isNotEmpty() && now - recent.first.atElapsed > 10_000L) recent.removeFirst()
+        // Keep the COMPLETE route from first GPS fix until parking, including after restarts.
+        val recorded = RouteStore.append(this, location.time, fix.latitude, fix.longitude, fix.accuracy)
         FindMyBikeStore.lastFix(this, fix.latitude, fix.longitude, fix.accuracy)
+        if (!recorded) showForeground("Lỗi ghi hành trình · đang thử lấy GPS")
 
         val previous = lastLocation
         val derivedSpeed = if (previous != null && location.elapsedRealtimeNanos > previous.elapsedRealtimeNanos) {
@@ -268,6 +268,7 @@ class BikeTrackingService : Service(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private fun saveFix(fix: Fix, method: String) {
+        RouteStore.finish(this)
         FindMyBikeStore.save(this, fix.latitude, fix.longitude, fix.accuracy, method)
         getSystemService(NotificationManager::class.java).notify(SAVED_ID,
             alert("Đã lưu vị trí dựng xe",

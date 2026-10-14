@@ -27,6 +27,7 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.PolylineOptions
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -52,12 +53,17 @@ class MainActivity : Activity() {
     private lateinit var timerStatus: TextView
     private lateinit var startBike: Button
     private lateinit var manual: Button
-    private lateinit var fakeGate: Button
+    private lateinit var fakePanelStatus: TextView
     private lateinit var saveBike: Button
     private lateinit var cancelBike: Button
     private lateinit var navigation: Button
     private lateinit var standbyStart: Button
     private lateinit var standbyStop: Button
+
+    private val lateFake = Runnable {
+        FakeGateTest.emit(this, FakeGateTest.Kind.ENTRY)
+        if (::fakePanelStatus.isInitialized) refresh()
+    }
 
     private val loop = object : Runnable {
         override fun run() {
@@ -131,13 +137,7 @@ class MainActivity : Activity() {
         content.addView(startBike, spacing(12))
         manual = action("Đánh dấu thủ công · bật tracking") { requestBikeStart(true) }
         content.addView(manual, spacing(8))
-        fakeGate = action("TEST: Giả lập tín hiệu vào cổng") {
-            if (FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING) {
-                startService(Intent(this, BikeTrackingService::class.java).setAction(BikeTrackingService.GATE))
-            }
-        }
-        content.addView(fakeGate, spacing(8))
-        saveBike = action("Lưu vị trí dựng xe ngay") {
+         saveBike = action("Lưu vị trí dựng xe ngay") {
             startService(Intent(this, BikeTrackingService::class.java).setAction(BikeTrackingService.SAVE))
         }
         content.addView(saveBike, spacing(8))
@@ -145,6 +145,53 @@ class MainActivity : Activity() {
             startService(Intent(this, BikeTrackingService::class.java).setAction(BikeTrackingService.CANCEL))
         }
         content.addView(cancelBike, spacing(8))
+
+        // Real Android test notifications, plus a separate synthetic parser/FGS test path.
+        content.addView(label("FAKE NOTIFICATION PANEL", 12f, mint, true), spacing(27))
+        val fakePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = rounded(panelBg)
+        }
+        fakePanel.addView(label("MÔ PHỎNG · KHÔNG PHẢI PUSH THẬT TỪ TRƯỜNG",
+            11f, Color.rgb(255, 198, 107), true))
+        fakePanel.addView(label("Phenikaa Uni", 17f, white, true), spacing(11))
+        fakePanel.addView(label("Xe đã vào cổng trường", 14f, muted), spacing(3))
+        fakePanel.addView(label(
+            "Mỗi nút sẽ đăng thông báo FAKE Android từ Parking Lab và chạy cùng bộ phân loại sự kiện. " +
+            "Không giả danh app Phenikaa Uni, không cần server.",
+            12f, muted), spacing(10))
+        fakePanelStatus = label("", 12f, mint, true)
+        fakePanel.addView(fakePanelStatus, spacing(12))
+        content.addView(fakePanel, spacing(9))
+        content.addView(action("1 · FAKE XE VÀO — kích hoạt GPS", true) {
+            FakeGateTest.emit(this, FakeGateTest.Kind.ENTRY)
+            refresh()
+        }, spacing(8))
+        content.addView(action("2 · FAKE XE RA — phải bỏ qua") {
+            FakeGateTest.emit(this, FakeGateTest.Kind.EXIT)
+            refresh()
+        }, spacing(7))
+        content.addView(action("3 · FAKE TIN KHÁC — phải bỏ qua") {
+            FakeGateTest.emit(this, FakeGateTest.Kind.UNRELATED)
+            refresh()
+        }, spacing(7))
+        content.addView(action("4 · FAKE TRÙNG — không mở phiên thứ hai") {
+            FakeGateTest.emit(this, FakeGateTest.Kind.ENTRY)
+            FakeGateTest.emit(this, FakeGateTest.Kind.ENTRY)
+            refresh()
+        }, spacing(7))
+        content.addView(action("5 · FAKE ĐẾN MUỘN — gửi sau 12 giây") {
+            tick.removeCallbacks(lateFake)
+            FakeGateTest.noteScheduled(this)
+            tick.postDelayed(lateFake, 12_000L)
+            refresh()
+        }, spacing(7))
+        content.addView(action("6 · KHÔNG GỬI — chờ hết 10 giây") {
+            tick.removeCallbacks(lateFake)
+            FakeGateTest.noteNoPush(this)
+            refresh()
+        }, spacing(7))
 
         content.addView(label("ĐIỂM DỰNG XE", 12f, mint, true), spacing(25))
         savedStatus = label("", 14f, white)
@@ -329,6 +376,13 @@ class MainActivity : Activity() {
         shownMapPoint = key
         val position = LatLng(fix.first, fix.second)
         map.clear()
+        val wholeRoute = RouteStore.savedPoints(this).map { LatLng(it.lat, it.lon) }
+        if (wholeRoute.size > 1) {
+            map.addPolyline(PolylineOptions()
+                .addAll(wholeRoute)
+                .width(dp(4).toFloat())
+                .color(Color.rgb(39, 130, 225)))
+        }
         map.addMarker(MarkerOptions().position(position).title("Xe của m ở đây"))
         map.moveCamera(CameraUpdateFactory.newLatLngZoom(position, 18f))
     }
@@ -346,7 +400,8 @@ class MainActivity : Activity() {
         val last = FindMyBikeStore.lastFix(this)
         gpsStatus.text = if (current == FindMyBikeStore.TRACKING) {
             if (last == null) "GPS đang tìm tọa độ đầu tiên..."
-            else "GPS gần nhất: ±" + last.third.toInt() + " m · giữ 10 giây cuối"
+            else "GPS gần nhất: ±" + last.third.toInt() + " m · đã ghi " +
+                RouteStore.activeCount(this) + " điểm của TOÀN BỘ hành trình"
         } else "Không lấy GPS khi đang chờ thông báo"
 
         val saved = FindMyBikeStore.saved(this)
@@ -354,11 +409,12 @@ class MainActivity : Activity() {
             "Tọa độ: " + FindMyBikeStore.coords(this) + "\n" +
             "Cách ghi: " + FindMyBikeStore.savedMethod(this) + "\n" +
             "Lúc: " + SimpleDateFormat("HH:mm:ss dd/MM/yyyy", Locale.getDefault())
-                .format(Date(FindMyBikeStore.savedTime(this)))
+                .format(Date(FindMyBikeStore.savedTime(this))) +
+            "\nHành trình đã lưu: " + RouteStore.savedCount(this) + " điểm GPS"
         }
         startBike.isEnabled = current == FindMyBikeStore.IDLE || current == FindMyBikeStore.SAVED
         manual.isEnabled = current == FindMyBikeStore.WAITING || current == FindMyBikeStore.NEEDS_MANUAL
-        fakeGate.isEnabled = current == FindMyBikeStore.WAITING
+        fakePanelStatus.text = FakeGateTest.status(this)
         saveBike.isEnabled = current == FindMyBikeStore.TRACKING
         cancelBike.isEnabled = current == FindMyBikeStore.WAITING ||
             current == FindMyBikeStore.NEEDS_MANUAL || current == FindMyBikeStore.TRACKING
@@ -410,6 +466,7 @@ class MainActivity : Activity() {
     }
     override fun onDestroy() {
         tick.removeCallbacks(loop)
+        tick.removeCallbacks(lateFake)
         mapView?.onDestroy()
         super.onDestroy()
     }
