@@ -211,8 +211,8 @@ class MainActivity : Activity() {
             val connection = NotificationStore.connected(this)
             listenerInfo.text = "Quyền Notification Access: " +
                 (if (granted) "ĐÃ CẤP" else "CHƯA CẤP") +
-                "\\nListener đang kết nối: " + (if (connection) "CÓ" else "CHƯA") +
-                "\\nĐã nhận fake: " + NotificationStore.ownCount(this) +
+                "\nListener đang kết nối: " + (if (connection) "CÓ" else "CHƯA") +
+                "\nĐã nhận fake: " + NotificationStore.ownCount(this) +
                 " | App khác: " + NotificationStore.externalCount(this)
         }
         if (::eventsInfo.isInitialized) {
