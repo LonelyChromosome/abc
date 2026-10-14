@@ -2,6 +2,7 @@ package com.lonelychromosome.parkinglab
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.app.NotificationManager
@@ -22,6 +23,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.util.Calendar
 
 /**
@@ -40,6 +42,8 @@ class ScheduledSetupActivity : Activity() {
     private lateinit var permText: TextView
     private lateinit var chosenText: TextView
     private lateinit var messageText: TextView
+    private lateinit var confirmStatus: TextView
+    private lateinit var confirmButton: Button
     private lateinit var waitSeconds: EditText
 
     private fun dp(px: Int) = (px * resources.displayMetrics.density).toInt()
@@ -71,6 +75,9 @@ class ScheduledSetupActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        targetMillis = savedInstanceState?.getLong("targetMillis")
+            ?: ScheduledGateController.time(this).takeIf { it > System.currentTimeMillis() }
+            ?: targetMillis
         window.statusBarColor = pageBg
         window.navigationBarColor = pageBg
         val root = LinearLayout(this).apply {
@@ -106,9 +113,13 @@ class ScheduledSetupActivity : Activity() {
         add(settings, waitSeconds, 5)
         add(root, settings, 17)
 
-        add(root, button("Đặt lịch chờ tự động", true) { schedule() }, 13)
+        confirmButton = button("XÁC NHẬN ĐẶT GIỜ CHỜ", true) { schedule() }
+        add(root, confirmButton, 13)
+        confirmStatus = text("Chọn ngày/giờ và nhấn xác nhận.", 13f, muted)
+        add(root, confirmStatus, 7)
         add(root, button("Hủy lịch đã đặt") {
             ScheduledGateController.cancel(this)
+            confirmStatus.text = "Đã hủy lịch · không còn giờ chờ tự động."
             updateState()
         }, 7)
 
@@ -145,6 +156,8 @@ class ScheduledSetupActivity : Activity() {
                 cal.set(year, month, day, hour, minute, 0)
                 cal.set(Calendar.MILLISECOND, 0)
                 targetMillis = cal.timeInMillis
+                confirmStatus.text = "Đã chọn: " + ScheduledGateController.format(targetMillis) +
+                    ". Bấm XÁC NHẬN ĐẶT GIỜ CHỜ để lưu."
                 updateState()
             }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
@@ -171,26 +184,63 @@ class ScheduledSetupActivity : Activity() {
 
     private fun schedule() {
         val seconds = readWait()
+        val selected = targetMillis
         val problem = when {
-            targetMillis <= System.currentTimeMillis() -> "Hãy chọn thời điểm trong tương lai."
+            selected <= System.currentTimeMillis() ->
+                "Giờ chọn đã qua. Hãy chọn ngày và giờ trong tương lai."
             seconds == null -> "Thời gian chờ phải từ 10 đến 14400 giây."
-            !ScheduledGateController.hasForegroundLocation(this) -> "Cần quyền vị trí trước khi hẹn giờ."
-            !ScheduledGateController.hasBackgroundLocation(this) -> "Cần quyền vị trí MỌI LÚC để tự bật GPS khi khóa màn hình."
-            !ScheduledGateController.hasExactAlarm(this) -> "Cần quyền BÁO THỨC CHÍNH XÁC để đúng giờ."
-            !hasListenerAccess() -> "Chưa cấp quyền đọc thông báo Phenikaa Uni."
-            !hasNotices() -> "Cần cho phép thông báo để nhận trạng thái và cảnh báo."
+            !ScheduledGateController.hasForegroundLocation(this) ->
+                "Ứng dụng chưa nhận được quyền vị trí khi dùng."
+            !ScheduledGateController.hasBackgroundLocation(this) ->
+                "Ứng dụng chưa nhận được quyền vị trí mọi lúc."
+            !ScheduledGateController.hasExactAlarm(this) ->
+                "Android chưa cho phép báo thức chính xác."
+            !hasListenerAccess() ->
+                "Android chưa cho phép Parking Lab Scheduled đọc thông báo."
+            !hasNotices() ->
+                "Ứng dụng chưa được phép hiển thị thông báo tiến trình."
             else -> null
         }
         if (problem != null) {
-            messageText.text = problem
-            updateState(false)
+            showScheduleResult(false, problem)
             return
         }
-        val accepted = ScheduledGateController.schedule(this, targetMillis, seconds!!)
-        updateState()
-        messageText.text = if (accepted)
-            "Đã lên lịch. M có thể khóa màn hình; BPA sẽ chờ thông báo khi đến giờ."
-        else "Không thể đặt báo thức. Hãy kiểm tra quyền và thử lại."
+        confirmButton.isEnabled = false
+        try {
+            val accepted = ScheduledGateController.schedule(this, selected, seconds!!)
+            val actualTime = ScheduledGateController.time(this)
+            val confirmed = accepted && actualTime == selected &&
+                ScheduledGateController.waitSeconds(this) == seconds &&
+                actualTime > System.currentTimeMillis()
+            if (confirmed) {
+                showScheduleResult(true,
+                    "Đã đặt lịch " + ScheduledGateController.format(actualTime) +
+                    ". Chờ thông báo trong " + seconds + " giây. " +
+                    "Hãy kiểm tra thông báo 1/4 trên thanh trạng thái.")
+            } else {
+                showScheduleResult(false,
+                    "Không xác nhận được lịch đã lưu. " +
+                    ScheduledGateController.lastEvent(this))
+            }
+        } catch (e: Exception) {
+            showScheduleResult(false, "Đặt lịch thất bại: " +
+                e.javaClass.simpleName + ". Vui lòng thử lại.")
+        } finally {
+            confirmButton.isEnabled = true
+        }
+    }
+
+    private fun showScheduleResult(ok: Boolean, detail: String) {
+        val result = (if (ok) "ĐẶT GIỜ THÀNH CÔNG\n" else "KHÔNG ĐẶT ĐƯỢC GIỜ\n") + detail
+        confirmStatus.setTextColor(if (ok) accent else Color.rgb(255, 153, 142))
+        confirmStatus.text = result
+        messageText.text = result
+        updateState(false)
+        AlertDialog.Builder(this)
+            .setTitle(if (ok) "Đã xác nhận giờ chờ" else "Không đặt được lịch")
+            .setMessage(detail)
+            .setPositiveButton("Đóng", null)
+            .show()
     }
 
     private fun askRuntimePermissions() {
@@ -244,6 +294,11 @@ class ScheduledSetupActivity : Activity() {
             "\nCảm biến đi bộ: " + yes(hasMotion()) + " (tùy thiết bị)"
         if (alsoMessage) messageText.text = "Bộ chờ không lấy GPS trước khi có sự kiện xe vào. " +
             "Kiểm tra thực tế trên máy để xác nhận Android cho phép tự chạy từ nền."
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong("targetMillis", targetMillis)
+        super.onSaveInstanceState(outState)
     }
 
     private fun yes(ok: Boolean) = if (ok) "ĐÃ CẤP" else "CHƯA CẤP"

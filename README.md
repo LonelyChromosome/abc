@@ -1,7 +1,11 @@
-# BPA Find My Bike — Scheduled test v0.4.1
+# BPA Find My Bike — Scheduled test v0.4.2
 
 **Parallel Android build**: `com.lonelychromosome.parkinglab.scheduled` / **Parking Lab Scheduled**.
 Developed independently from the original v0.3.1 (`com.lonelychromosome.parkinglab`). No changes to DemoF3 or main.
+
+## Schedule confirmation fix v0.4.2
+
+The selected date/time survives Activity recreation. The confirm button displays an immediate success or failure result directly under itself AND through a dialog, checks that the alarm date and duration were actually persisted, and does not silently appear inert if scheduling cannot proceed. The selected time is explicitly shown after leaving the time picker.
 
 ## Outside-app progress notification v0.4.1
 
