@@ -29,7 +29,7 @@ import java.util.Calendar
  * start/manual controls continue to work in MainActivity.
  */
 class ScheduledSetupActivity : Activity() {
-    private val background = Color.rgb(8, 13, 22)
+    private val pageBg = Color.rgb(8, 13, 22)
     private val panel = Color.rgb(23, 34, 49)
     private val accent = Color.rgb(60, 229, 176)
     private val labelColor = Color.rgb(239, 246, 255)
@@ -65,18 +65,18 @@ class ScheduledSetupActivity : Activity() {
             isAllCaps = false
             textSize = 14f
             background = rounded(if (main) accent else Color.rgb(45, 61, 79))
-            setTextColor(if (main) background else labelColor)
+            setTextColor(if (main) pageBg else labelColor)
             setOnClickListener { callback() }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = background
-        window.navigationBarColor = background
+        window.statusBarColor = pageBg
+        window.navigationBarColor = pageBg
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(28), dp(20), dp(32))
-            setBackgroundColor(background)
+            setBackgroundColor(pageBg)
         }
         add(root, button("‹ Trở về Find My Bike") { finish() })
         add(root, text("BỘ CHỜ TỰ ĐỘNG", 12f, accent, true), 23)

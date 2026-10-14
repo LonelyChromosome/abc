@@ -56,7 +56,7 @@ class BikeTrackingService : Service(), SensorEventListener {
     private var walkingSteps = 0
     private var hasForeground = false
 
-    private val timeout = Runnable {
+    private val timeout: Runnable = Runnable {
         if (FindMyBikeStore.mode(this) != FindMyBikeStore.WAITING) return@Runnable
         if (FindMyBikeStore.remainingWaitMs(this) > 0L) {
             handler.postDelayed(timeout, FindMyBikeStore.remainingWaitMs(this))
