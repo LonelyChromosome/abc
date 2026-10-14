@@ -1,6 +1,12 @@
 package com.lonelychromosome.parkinglab
 
 import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ComponentName
+import android.provider.Settings
+import android.widget.ScrollView
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -24,6 +30,10 @@ class MainActivity : Activity() {
     private lateinit var info: TextView
     private lateinit var start: Button
     private lateinit var stop: Button
+    private lateinit var listenerInfo: TextView
+    private lateinit var eventsInfo: TextView
+    private lateinit var fakeButton: Button
+    private var fakeSequence = 0
     private val refreshLoop = object : Runnable {
         override fun run() {
             refresh()
@@ -60,8 +70,8 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(8, 13, 22))
         }
         root.addView(text("PARKING LAB", 14f, mint, true))
-        root.addView(text("Standby Test v0.1", 26f, white, true), margin(14))
-        root.addView(text("Bấm kích hoạt, đóng app, vuốt đa nhiệm và khóa màn hình. Mở lại để kiểm tra.", 14f, muted), margin(12))
+        root.addView(text("Notification Test v0.2", 26f, white, true), margin(14))
+        root.addView(text("Giữ bài test chạy nền v0.1. Cấp quyền đọc thông báo rồi gửi thông báo thử, kể cả khi khóa màn hình.", 14f, muted), margin(12))
         status = text("CHƯA KÍCH HOẠT", 14f, mint, true)
         root.addView(status, margin(32))
         clock = text("00:00:00", 52f, white, true).apply { gravity = Gravity.CENTER_HORIZONTAL }
@@ -89,8 +99,65 @@ class MainActivity : Activity() {
         root.addView(stop, margin(10))
         info = text("", 13f, muted)
         root.addView(info, margin(24))
-        setContentView(root)
+        root.addView(text("BỘ NHẬN THÔNG BÁO", 15f, mint, true), margin(26))
+        root.addView(text(
+            "Thông báo FAKE ở đây là thông báo Android thật từ Parking Lab. " +
+            "Thông báo từ app khác sẽ được ghi nhận riêng.", 13f, muted), margin(8))
+        val accessButton = Button(this).apply {
+            text = "CẤP QUYỀN ĐỌC THÔNG BÁO"
+            setTextColor(white)
+            background = rounded(Color.rgb(41, 54, 72))
+            setOnClickListener {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+        }
+        root.addView(accessButton, margin(16))
+        listenerInfo = text("", 13f, muted)
+        root.addView(listenerInfo, margin(10))
+        fakeButton = Button(this).apply {
+            text = "GỬI THÔNG BÁO FAKE"
+            setTextColor(Color.rgb(3, 25, 22))
+            background = rounded(mint)
+            setOnClickListener { requestFakeNotification() }
+        }
+        root.addView(fakeButton, margin(18))
+        root.addView(text("NHẬT KÝ NHẬN THÔNG BÁO", 14f, white, true), margin(26))
+        eventsInfo = text("", 13f, muted)
+        root.addView(eventsInfo, margin(8, 30))
+        val scroll = ScrollView(this).apply { isFillViewport = true }
+        scroll.addView(root)
+        setContentView(scroll)
         refresh()
+    }
+    private fun listenerGranted(): Boolean {
+        if (Build.VERSION.SDK_INT >= 27) {
+            return getSystemService(NotificationManager::class.java)
+                .isNotificationListenerAccessGranted(ComponentName(this, ParkingNotificationListener::class.java))
+        }
+        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: ""
+        return enabled.split(":").any {
+            ComponentName.unflattenFromString(it)?.packageName == packageName
+        }
+    }
+    private fun requestFakeNotification() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 92)
+        } else postFakeNotification()
+    }
+    private fun postFakeNotification() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(
+            "parkinglab_test", "Parking Lab - fake notifications", NotificationManager.IMPORTANCE_DEFAULT))
+        fakeSequence += 1
+        val notice = Notification.Builder(this, "parkinglab_test")
+            .setSmallIcon(R.drawable.ic_stat_timer)
+            .setContentTitle("FAKE: XE ĐÃ VÀO CỔNG")
+            .setContentText("BPA Parking Lab thử nghiệm số $fakeSequence")
+            .setWhen(System.currentTimeMillis())
+            .setAutoCancel(true)
+            .build()
+        manager.notify(2001, notice)
     }
     private fun requestStart() {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -101,6 +168,13 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(req: Int, permissions: Array<out String>, result: IntArray) {
         super.onRequestPermissionsResult(req, permissions, result)
         if (req == 91) runService()
+        if (req == 92) {
+            if (result.isNotEmpty() && result[0] == PackageManager.PERMISSION_GRANTED) {
+                postFakeNotification()
+            } else {
+                listenerInfo.text = "Chưa cấp quyền đăng thông báo, không thể gửi fake."
+            }
+        }
     }
     private fun runService() {
         try {
@@ -132,6 +206,18 @@ class MainActivity : Activity() {
             "Đã vuốt khỏi đa nhiệm: ${TimerStore.removedAt(this)}\n\n" +
             "Timer dùng thời gian monotonic; nhịp dịch vụ xác nhận hoạt động nền. " +
             "Android có thể trì hoãn nhịp khi ngủ sâu. Buộc dừng sẽ dừng service."
+        if (::listenerInfo.isInitialized) {
+            val granted = listenerGranted()
+            val connection = NotificationStore.connected(this)
+            listenerInfo.text = "Quyền Notification Access: " +
+                (if (granted) "ĐÃ CẤP" else "CHƯA CẤP") +
+                "\\nListener đang kết nối: " + (if (connection) "CÓ" else "CHƯA") +
+                "\\nĐã nhận fake: " + NotificationStore.ownCount(this) +
+                " | App khác: " + NotificationStore.externalCount(this)
+        }
+        if (::eventsInfo.isInitialized) {
+            eventsInfo.text = NotificationStore.recentText(this)
+        }
     }
     override fun onResume() {
         super.onResume()

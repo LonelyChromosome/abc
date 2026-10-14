@@ -18,7 +18,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "ANDROID_HOME=$ANDROID_HOME"
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
@@ -29,6 +28,6 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: BPA-Parking-Lab-Standby-v0.1
+          name: BPA-Parking-Lab-Notification-v0.2
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

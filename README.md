@@ -1,24 +1,22 @@
-# BPA Parking Lab — Standby test v0.1
+# BPA Parking Lab — Notification Test v0.2
 
-Standalone Android APK for testing a foreground standby service. **No DemoF3 changes.**
+Standalone native Android test project. Does NOT change DemoF3.
 
-## Scope
-- Tap **KÍCH HOẠT** to start the service and stopwatch.
-- Swipe the app out of Recents, lock the screen, and reopen the app.
-- Stopwatch uses monotonic elapsed time, so elapsed time alone is *not evidence* the service ran continuously.
-- The service stores heartbeat counts every ~10 seconds. The screen shows heartbeat age, restarts, and Recents removal time.
-- Tap **DỪNG / ĐẶT LẠI** to stop.
-- No GPS, alarms, notifications from another app, QLĐT, sensors, or navigation.
+## Step 1 — preserved
+Tap **KÍCH HOẠT**, let the foreground timer service run. Swipe from Recents, lock and reopen. Elapsed time and heartbeat/restarts/task removal are retained from v0.1.
 
-## Test
-1. Install debug APK from GitHub Actions artifact `BPA-Parking-Lab-Standby-v0.1`.
-2. Grant notifications (optional for the service but recommended to see its persistent notification).
-3. Tap KÍCH HOẠT; wait ~20 seconds and record timer / heartbeat.
-4. Swipe away from Recents, lock screen for several minutes, unlock and reopen.
-5. Confirm timer advanced, service notification survived, and heartbeat count advanced after task removal. Deep sleep may delay heartbeats; examine gaps rather than assuming failure.
-6. Force stop from Android Settings deliberately to verify the documented limitation: no app can keep running after a force stop.
+## Step 2 — new
+Tap **CẤP QUYỀN ĐỌC THÔNG BÁO**, enable **Parking Lab - Notification Test** in Android's **Notification Access** settings, and return.
+Tap **GỬI THÔNG BÁO FAKE**. This posts a genuine Android system notification, not an in-app simulation.
+The listener registers FAKE; **standby foreground notification refreshes are ignored**.
+Have a second app deliver a new notification (e.g. a test chat from another phone); the app stores type EXTERNAL, source package, timestamp and approximate delivery delay.
+Close Parking Lab, swipe it from Recents and lock the phone, then send a second external notification and reopen the app to inspect counters.
+Your test data is stored locally only. **External notification title and body are intentionally NOT saved.**
+No GPS, tracking, walking recognition, calendar, alarms, backend or network permissions are added.
 
-## Build
-Github Actions workflow builds debug APK on push to main using JDK 17, Android SDK 35, Gradle 8.9, Kotlin 2.0.21 and Android Gradle Plugin 8.7.3.
+### Notes
+- Notification Access is a separate Android Settings grant; POST_NOTIFICATIONS does not grant it.
+- The notification listener depends on Android and OEM restrictions. Some notifications (e.g., protected content) may be filtered/redacted.
+- GitHub Actions debug APK signing certificates are ephemeral. If Android rejects installing v0.2 over v0.1 due to conflicting signatures, uninstall v0.1 first.
 
-Only testing; no networking or telemetry.
+GitHub Actions builds debug APK on main.
