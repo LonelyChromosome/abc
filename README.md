@@ -1,7 +1,19 @@
-# BPA Find My Bike — Scheduled test v0.4
+# BPA Find My Bike — Scheduled test v0.4.1
 
 **Parallel Android build**: `com.lonelychromosome.parkinglab.scheduled` / **Parking Lab Scheduled**.
 Developed independently from the original v0.3.1 (`com.lonelychromosome.parkinglab`). No changes to DemoF3 or main.
+
+## Outside-app progress notification v0.4.1
+
+A single Android notification remains visible in the notification shade and lock-screen (subject to Android notification permission and user display settings). It is not a map or location pin.
+
+- **1/4 HẸN GIỜ:** persistent scheduled-time reminder, with clock time and chosen notification wait duration. GPS is OFF. Does not falsely claim that a service is running before the alarm.
+- **2/4 CHỜ QUẸT THẺ:** a location-type foreground service notification confirms service is actually running; shows the remaining wait seconds, GPS OFF and last notification refresh time. Refreshed approximately every 7 seconds.
+- **3/4 XÁC ĐỊNH XE:** updates while foreground service lives, displaying whether GPS has received new fixes, latest fix age, approximate accuracy, total full-trip points written to disk, and tentative stop/step recognition. GPS failure or stale fixes are shown explicitly rather than labelling service existence as valid tracking.
+- **4/4 ĐÃ XÁC ĐỊNH:** after a parking confirmation, a visible completion notification shows route point count, estimated GPS accuracy and GPS OFF.
+- **EXPIRED/ERROR/CANCELLED:** explicit terminal status or actionable warning. If Android blocks background location service starting, show the failure instead of pretending GPS is running.
+
+Notification updates are low-noise (one progress notification refreshed in place, ~7s) rather than a flood of new notifications. The status is a diagnostic, not proof of parking accuracy until actual field tests succeed.
 
 ## New scheduled wait mode
 

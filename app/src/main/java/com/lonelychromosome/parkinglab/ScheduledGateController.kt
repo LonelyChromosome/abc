@@ -72,8 +72,10 @@ object ScheduledGateController {
             val alarm = c.getSystemService(AlarmManager::class.java)
             alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at,
                 pending(c, ACTION_ARM, at, REQUEST_ARM))
-            prefs(c).edit().putLong("at", at).putInt("wait_seconds", waitSeconds)
+            val saved = prefs(c).edit().putLong("at", at).putInt("wait_seconds", waitSeconds)
                 .putString("last", "Đã hẹn giờ: " + format(at)).commit()
+            if (saved) BikeProgressNotification.scheduled(c, at, waitSeconds)
+            saved
         } catch (_: SecurityException) {
             setEvent(c, "Không có quyền báo thức chính xác")
             false
@@ -84,12 +86,16 @@ object ScheduledGateController {
         c.getSystemService(AlarmManager::class.java).cancel(
             pending(c, ACTION_ARM, time(c), REQUEST_ARM))
         prefs(c).edit().remove("at").putString("last", "Đã hủy lịch chờ").commit()
+        BikeProgressNotification.clearScheduled(c)
     }
 
     fun markFired(c: Context, at: Long): Boolean {
         if (time(c) != at || at <= 0L) return false
         prefs(c).edit().remove("at").putString("last",
             "Đến giờ hẹn · bắt đầu chờ thông báo xe vào").commit()
+        BikeProgressNotification.event(c, "2/4 · ĐÃ ĐẾN GIỜ HẸN",
+            "Đang kích hoạt bộ chờ quẹt thẻ",
+            "Đã đánh thức bộ hẹn giờ · GPS chưa bật. Chờ dịch vụ xác nhận.", true)
         return true
     }
 
@@ -140,6 +146,7 @@ object ScheduledGateController {
                 .setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at,
                     pending(c, ACTION_ARM, at, REQUEST_ARM))
             setEvent(c, "Đã khôi phục lịch: " + format(at))
+            BikeProgressNotification.scheduled(c, at, waitSeconds(c))
         } catch (_: SecurityException) {
             setEvent(c, "Không thể khôi phục lịch")
         }
@@ -163,6 +170,9 @@ object ScheduledGateController {
         scheduleExpire(c, FindMyBikeStore.waitingDeadline(c))
         if (!hasBackgroundLocation(c) || !hasForegroundLocation(c)) {
             setEvent(c, "Thiếu quyền vị trí nền; đang chờ push, nhưng cần mở app để bật GPS")
+            BikeProgressNotification.event(c, "CẦN THAO TÁC · CHƯA BẬT GPS",
+                "Giờ hẹn đã tới nhưng thiếu quyền vị trí nền",
+                "Dịch vụ GPS chưa xác nhận hoạt động. Mở app để cấp quyền.")
             notifyAction(c, "Lịch Find My Bike đã đến", "Cần cấp quyền vị trí mọi lúc để tự bật GPS.")
             return
         }
@@ -172,6 +182,9 @@ object ScheduledGateController {
             setEvent(c, "Đã đến giờ; kích hoạt service chờ thông báo xe vào")
         } catch (e: Exception) {
             setEvent(c, "Android chặn service nền: " + e.javaClass.simpleName)
+            BikeProgressNotification.event(c, "LỖI · DỊCH VỤ NỀN BỊ CHẶN",
+                "Android không cho kích hoạt bộ chờ tự động",
+                "Lỗi: " + e.javaClass.simpleName + ". Mở BPA để bật thủ công.")
             notifyAction(c, "Find My Bike cần thao tác", "Chạm mở app để tiếp tục chờ quẹt thẻ.")
         }
     }
@@ -180,6 +193,9 @@ object ScheduledGateController {
         if (!deadlineIntentMatches(c, at)) return
         FindMyBikeStore.needManual(c)
         setEvent(c, "Hết thời gian chờ · không có push xe vào hợp lệ")
+        BikeProgressNotification.event(c, "HẾT GIỜ · KHÔNG NHẬN XE VÀO",
+            "Không phát hiện thông báo quẹt thẻ hợp lệ",
+            "GPS chưa được bật. Có thể mở app để bắt đầu thủ công.")
         notifyAction(c, "Chưa nhận thông báo xe vào", "Mở app nếu muốn bật tracking thủ công.")
         c.stopService(Intent(c, BikeTrackingService::class.java))
     }

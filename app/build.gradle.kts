@@ -10,8 +10,8 @@ android {
     applicationId = "com.lonelychromosome.parkinglab.scheduled"
     minSdk = 26
     targetSdk = 35
-    versionCode = 5
-    versionName = "0.4.0-scheduled"
+    versionCode = 6
+    versionName = "0.4.1-scheduled"
     manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
       if (mapsApiKey.isBlank()) "NOT_CONFIGURED" else mapsApiKey
     buildConfigField("boolean", "MAPS_READY", mapsApiKey.isNotBlank().toString())

@@ -55,6 +55,18 @@ class BikeTrackingService : Service(), SensorEventListener {
     private var stationarySince = 0L
     private var walkingSteps = 0
     private var hasForeground = false
+    private var newestFixAt = 0L
+    private var latestPhase = "Đang tìm vị trí"
+    private var writeError = false
+    private var source = "Đang chờ xác nhận xe vào"
+
+    private val statusTicker: Runnable = object : Runnable {
+        override fun run() {
+            if (!hasForeground) return
+            updateStatusNotification()
+            handler.postDelayed(this, 7_000L)
+        }
+    }
 
     private val timeout: Runnable = Runnable {
         if (FindMyBikeStore.mode(this) != FindMyBikeStore.WAITING) return@Runnable
@@ -64,6 +76,9 @@ class BikeTrackingService : Service(), SensorEventListener {
         }
         FindMyBikeStore.needManual(this)
         ScheduledGateController.cancelExpire(this)
+        BikeProgressNotification.event(this, "HẾT GIỜ · CHƯA NHẬN XE VÀO",
+            "Không có thông báo quẹt thẻ hợp lệ",
+            "Không bật GPS. Mở BPA để bật theo dõi thủ công.")
         getSystemService(NotificationManager::class.java).notify(MANUAL_ID,
             alert("Chưa nhận thông báo vào cổng",
                 "Bấm để đánh dấu thủ công và bắt đầu theo dõi xe.", true))
@@ -104,17 +119,30 @@ class BikeTrackingService : Service(), SensorEventListener {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                showForeground("Lịch đã tới · đang chờ thông báo quẹt thẻ")
-                scheduleWaitingTimeout()
-                return START_STICKY
+                try {
+                    showForeground("Lịch đã tới · đang chờ thông báo quẹt thẻ")
+                    scheduleWaitingTimeout()
+                    return START_STICKY
+                } catch (e: Exception) {
+                    FindMyBikeStore.needManual(this)
+                    ScheduledGateController.setEvent(this,
+                        "Android từ chối location service: " + e.javaClass.simpleName)
+                    BikeProgressNotification.event(this, "LỖI · ANDROID CHẶN SERVICE",
+                        "Đến giờ nhưng không bật được bộ chờ",
+                        "Lỗi " + e.javaClass.simpleName + " · mở app để xử lý")
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
             GATE -> {
                 // FCM notifications can arrive late; never replace a manual session.
                 if (FindMyBikeStore.withinWindow(this) && hasForeground) {
                     handler.removeCallbacks(timeout)
                     ScheduledGateController.cancelExpire(this)
+                    source = "Đã nhận thông báo xe vào"
                     showForeground("Đã nhận tín hiệu vào cổng · đang theo dõi")
                     beginTracking()
+                    updateStatusNotification()
                 }
             }
             MANUAL -> {
@@ -122,8 +150,10 @@ class BikeTrackingService : Service(), SensorEventListener {
                     FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING) {
                     handler.removeCallbacks(timeout)
                     ScheduledGateController.cancelExpire(this)
+                    source = "Theo dõi kích hoạt thủ công"
                     showForeground("Theo dõi vị trí · kích hoạt thủ công")
                     beginTracking()
+                    updateStatusNotification()
                     getSystemService(NotificationManager::class.java).cancel(MANUAL_ID)
                 }
             }
@@ -141,6 +171,9 @@ class BikeTrackingService : Service(), SensorEventListener {
                 ScheduledGateController.cancelExpire(this)
                 FindMyBikeStore.reset(this)
                 endWithoutSaving(true)
+                BikeProgressNotification.event(this, "ĐÃ HỦY PHIÊN FIND MY BIKE",
+                    "Đã dừng bộ chờ và tracking",
+                    "GPS TẮT · không có điểm đỗ mới được xác nhận.")
                 return START_NOT_STICKY
             }
             else -> {
@@ -167,21 +200,48 @@ class BikeTrackingService : Service(), SensorEventListener {
     }
 
     private fun showForeground(description: String) {
-        val n = Notification.Builder(this, TRACK_CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle("Find My Bike")
-            .setContentText(description)
-            .setOngoing(true).setOnlyAlertOnce(true)
-            .setContentIntent(openApp(50, false))
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .build()
+        // Dismiss the pending-alarm card only after startForeground succeeds.
+        val waiting = FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING
+        val notification = BikeProgressNotification.foreground(this,
+            if (waiting) "2/4 · CHỜ QUẸT THẺ" else "3/4 · ĐANG XÁC ĐỊNH XE",
+            description,
+            if (waiting) "GPS TẮT · đang chờ thông báo xe vào"
+            else "Đang kết nối GPS và phân tích chuyển động")
         if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(FGS_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(FGS_ID, n)
-        }
+            startForeground(FGS_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } else startForeground(FGS_ID, notification)
         hasForeground = true
         FindMyBikeStore.setServiceReady(this, true)
+        BikeProgressNotification.clearScheduled(this)
+        handler.removeCallbacks(statusTicker)
+        handler.postDelayed(statusTicker, 7_000L)
+    }
+
+    private fun updateStatusNotification() {
+        if (!hasForeground) return
+        if (FindMyBikeStore.mode(this) == FindMyBikeStore.WAITING) {
+            val left = (FindMyBikeStore.remainingWaitMs(this) + 999L) / 1000L
+            BikeProgressNotification.updateForeground(this, "2/4 · CHỜ QUẸT THẺ",
+                "Còn " + left + " giây · GPS TẮT",
+                "Listener đang chờ Phenikaa Uni. Hết hạn sẽ báo lại, không tự bật GPS.")
+            return
+        }
+        if (FindMyBikeStore.mode(this) != FindMyBikeStore.TRACKING) return
+        val elapsed = if (newestFixAt > 0L)
+            (SystemClock.elapsedRealtime() - newestFixAt).coerceAtLeast(0L) / 1000L else -1L
+        val condition = when {
+            writeError -> "LỖI GHI HÀNH TRÌNH"
+            !receivingLocations -> "GPS CHƯA KẾT NỐI"
+            elapsed == -1L -> "GPS ĐANG TÌM VỊ TRÍ"
+            elapsed > 15L -> "GPS ĐÃ " + elapsed + " GIÂY CHƯA CÓ ĐIỂM MỚI"
+            else -> "GPS CẬP NHẬT " + elapsed + " GIÂY TRƯỚC"
+        }
+        val accuracy = if (lastLocation?.hasAccuracy() == true)
+            " · ±" + lastLocation!!.accuracy.toInt() + "m" else ""
+        val points = RouteStore.activeCount(this)
+        BikeProgressNotification.updateForeground(this, "3/4 · ĐANG XÁC ĐỊNH XE",
+            condition + accuracy + " · " + points + " điểm",
+            source + " · " + latestPhase + ". Đang lưu toàn bộ hành trình.")
     }
 
     private fun scheduleWaitingTimeout() {
@@ -210,6 +270,9 @@ class BikeTrackingService : Service(), SensorEventListener {
         ScheduledGateController.cancelExpire(this)
         RouteStore.begin(this)
         FindMyBikeStore.track(this)
+        newestFixAt = 0L
+        writeError = false
+        latestPhase = "Đang tìm GPS"
         lastLocation = null
         stopCandidate = null
         stationarySince = 0L
@@ -238,6 +301,7 @@ class BikeTrackingService : Service(), SensorEventListener {
         try {
             fused.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
             receivingLocations = true
+            updateStatusNotification()
         } catch (_: SecurityException) {
             showForeground("Không thể lấy GPS · kiểm tra quyền vị trí")
         }
@@ -252,7 +316,8 @@ class BikeTrackingService : Service(), SensorEventListener {
         // Keep the COMPLETE route from first GPS fix until parking, including after restarts.
         val recorded = RouteStore.append(this, location.time, fix.latitude, fix.longitude, fix.accuracy)
         FindMyBikeStore.lastFix(this, fix.latitude, fix.longitude, fix.accuracy)
-        if (!recorded) showForeground("Lỗi ghi hành trình · đang thử lấy GPS")
+        writeError = !recorded
+        newestFixAt = now
 
         val previous = lastLocation
         val derivedSpeed = if (previous != null && location.elapsedRealtimeNanos > previous.elapsedRealtimeNanos) {
@@ -267,6 +332,7 @@ class BikeTrackingService : Service(), SensorEventListener {
                 stopCandidate = fix
                 stationarySince = now
                 walkingSteps = 0
+                latestPhase = "Xe đã dừng · đang xác minh"
             } else if (now - stationarySince <= 12_000L &&
                 fix.accuracy < (stopCandidate?.accuracy ?: Float.MAX_VALUE)) {
                 stopCandidate = fix
@@ -276,8 +342,10 @@ class BikeTrackingService : Service(), SensorEventListener {
             stopCandidate = null
             stationarySince = 0L
             walkingSteps = 0
+            latestPhase = "Phát hiện xe lại tiếp tục di chuyển"
         }
         lastLocation = location
+        if (RouteStore.activeCount(this) == 1) updateStatusNotification()
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -287,6 +355,8 @@ class BikeTrackingService : Service(), SensorEventListener {
         val duration = SystemClock.elapsedRealtime() - stationarySince
         if (duration < 3_000L || duration > 20_000L) return
         walkingSteps++
+        latestPhase = "Phát hiện " + walkingSteps + " bước sau khi dừng xe"
+        updateStatusNotification()
         if (walkingSteps >= 3) saveFix(candidate, "Dừng xe + đi bộ")
     }
 
@@ -295,14 +365,16 @@ class BikeTrackingService : Service(), SensorEventListener {
     private fun saveFix(fix: Fix, method: String) {
         RouteStore.finish(this)
         FindMyBikeStore.save(this, fix.latitude, fix.longitude, fix.accuracy, method)
-        getSystemService(NotificationManager::class.java).notify(SAVED_ID,
-            alert("Đã lưu vị trí dựng xe",
-                "Mở Find My Bike để xem điểm đỗ và dẫn đường.", false))
         endWithoutSaving(false)
+        BikeProgressNotification.event(this, "4/4 · ĐÃ XÁC ĐỊNH VỊ TRÍ XE",
+            "Đã lưu xe · " + RouteStore.savedCount(this) + " điểm GPS",
+            "Sai số ước lượng ±" + fix.accuracy.toInt() + "m · " +
+                method + " · GPS ĐÃ TẮT. Mở app để xem lại.")
     }
 
     private fun endWithoutSaving(removeAlert: Boolean) {
         handler.removeCallbacks(timeout)
+        handler.removeCallbacks(statusTicker)
         ScheduledGateController.cancelExpire(this)
         FindMyBikeStore.setServiceReady(this, false)
         if (receivingLocations) {
@@ -323,6 +395,7 @@ class BikeTrackingService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         handler.removeCallbacks(timeout)
+        handler.removeCallbacks(statusTicker)
         FindMyBikeStore.setServiceReady(this, false)
         if (receivingLocations) fused.removeLocationUpdates(locationCallback)
         if (registeredSteps) sensorManager.unregisterListener(this)
