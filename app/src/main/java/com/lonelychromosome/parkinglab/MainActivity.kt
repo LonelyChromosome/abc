@@ -35,6 +35,8 @@ class MainActivity : Activity() {
     private lateinit var cancelButton: Button
     private lateinit var mapsButton: Button
     private lateinit var gpxButton: Button
+    private lateinit var fenceInfo: TextView
+    private lateinit var fenceButton: Button
     private val updater = object : Runnable {
         override fun run() {
             render()
@@ -79,13 +81,18 @@ class MainActivity : Activity() {
         }
         content.addView(label("BPA  /  PARKING LAB", 13f, mint, true))
         content.addView(label("Chỗ đỗ của t", 29f, textColor, true), margin(12))
-        content.addView(label("Xác nhận ở cổng. Ghi đường đi. Lưu vị trí xe.", 14f, muted), margin(9))
+        content.addView(label("Google phát hiện vào vùng 100m → GPS tự ghi đường đi.", 14f, muted), margin(9))
         stageLabel = label("CHỜ XÁC NHẬN", 20f, mint, true)
         content.addView(stageLabel, margin(35))
         explanation = label("", 15f, textColor)
         content.addView(explanation, margin(13))
         gpsInfo = label("", 14f, muted)
         content.addView(gpsInfo, margin(16))
+        fenceInfo = label("", 13f, muted)
+        content.addView(fenceInfo, margin(16))
+        fenceButton = btn("BẬT TỰ ĐỘNG 100M", false) { toggleFence() }
+        content.addView(fenceButton, margin(12))
+        content.addView(btn("XEM GHIM GOOGLE MAPS", false) { openSchoolPin() }, margin(9))
         mainButton = btn("XÁC NHẬN BẮT ĐẦU", true) { onMainClick() }
         content.addView(mainButton, margin(27))
         cancelButton = btn("HỦY TRACKING", false) { confirmCancel() }
@@ -106,10 +113,38 @@ class MainActivity : Activity() {
         super.onResume()
         handler.removeCallbacks(updater)
         handler.post(updater)
+        if (CampusFence.enabled(this) && CampusFence.canRun(this)) CampusFence.register(this)
     }
     override fun onPause() {
         handler.removeCallbacks(updater)
         super.onPause()
+    }
+    private fun openSchoolPin() {
+        val target = "https://www.google.com/maps/place/?q=place_id:" + CampusFence.GOOGLE_PLACE_ID
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target)))
+    }
+    private fun toggleFence() {
+        if (CampusFence.enabled(this)) {
+            CampusFence.setEnabled(this, false)
+            render()
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION), 31)
+            return
+        }
+        CampusFence.setEnabled(this, true)
+        if (!CampusFence.canRun(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("Cho phép vị trí mọi lúc")
+                .setMessage("Android yêu cầu quyền 'Cho phép mọi lúc' để Google đánh thức GPS lúc điện thoại khóa. Mở Quyền ứng dụng → Vị trí → Cho phép mọi lúc, rồi quay lại.")
+                .setPositiveButton("Mở cài đặt") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + packageName)))
+                }.setNegativeButton("Để sau", null).show()
+        }
+        render()
     }
     private fun onMainClick() {
         if (TripStore.running(this)) saveParking() else askStart()
@@ -135,6 +170,11 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int,
         permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 31) {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                toggleFence()
+            } else Toast.makeText(this, "Cần Vị trí chính xác để đặt geofence 100m", Toast.LENGTH_LONG).show()
+        }
         if (requestCode == 30) {
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                     == PackageManager.PERMISSION_GRANTED) startTracking()
@@ -251,7 +291,7 @@ class MainActivity : Activity() {
             }
             else -> {
                 stageLabel.text = "CHỜ XÁC NHẬN"
-                explanation.text = "Khi tới cổng trường, bấm xác nhận. Trước đó app không sử dụng GPS."
+                explanation.text = "Google theo dõi vùng 100m quanh ghim trường. Khi vào vùng sẽ tự bật tracking; vẫn có thể bắt đầu thủ công."
                 mainButton.text = "XÁC NHẬN BẮT ĐẦU"
             }
         }
@@ -265,6 +305,10 @@ class MainActivity : Activity() {
             "${TripStore.count(this)} điểm GPS  ·  ${TripStore.metres(this).toInt()} m\n" +
                 "GPS cập nhật: $age  ·  Sai số: $acc"
         else "GPS đang tắt."
+        fenceButton.text = if (CampusFence.enabled(this)) "TẮT TỰ ĐỘNG 100M" else "BẬT TỰ ĐỘNG 100M"
+        fenceInfo.text = "Ghim trường: 20.96110, 105.74746 · bán kính 100m\\n" +
+            "Đăng ký: " + CampusFence.status(this) + "\\n" +
+            "Sự kiện: " + CampusFence.event(this) + " " + CampusFence.eventTime(this)
         hint.text = TripStore.message(this).takeIf { it.isNotBlank() }
             ?: "Lưu trên điện thoại. Google Maps dẫn tới tọa độ đã lưu, không tự chạy theo đường GPS gốc."
     }
