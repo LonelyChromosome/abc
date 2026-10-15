@@ -49,7 +49,7 @@ object CampusFence {
                 .setRequestId("phenikaa_gate_${i + 1}")
                 .setCircularRegion(coordinate[0], coordinate[1], RADIUS_M)
                 .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
-                .setNotificationResponsiveness(5_000L)
+                .setNotificationResponsiveness(5_000)
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
                 .build()
         }
