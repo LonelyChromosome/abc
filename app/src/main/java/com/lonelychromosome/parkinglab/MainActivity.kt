@@ -1,47 +1,48 @@
 package com.lonelychromosome.parkinglab
 
 import android.Manifest
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.ComponentName
-import android.provider.Settings
-import android.widget.ScrollView
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
+import android.provider.Settings
+import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.widget.*
+import java.util.Locale
 
+/** One-tap trip start, one-tap final parking confirmation, local track and Maps. */
 class MainActivity : Activity() {
-    private val timer = Handler(Looper.getMainLooper())
-    private lateinit var status: TextView
-    private lateinit var clock: TextView
-    private lateinit var info: TextView
-    private lateinit var start: Button
-    private lateinit var stop: Button
-    private lateinit var listenerInfo: TextView
-    private lateinit var eventsInfo: TextView
-    private lateinit var fakeButton: Button
-    private var fakeSequence = 0
-    private val refreshLoop = object : Runnable {
+    private val handler = Handler(Looper.getMainLooper())
+    private val bg = Color.rgb(8, 13, 22)
+    private val mint = Color.rgb(72, 231, 184)
+    private val textColor = Color.rgb(235, 243, 250)
+    private val muted = Color.rgb(156, 169, 185)
+    private lateinit var stageLabel: TextView
+    private lateinit var explanation: TextView
+    private lateinit var gpsInfo: TextView
+    private lateinit var hint: TextView
+    private lateinit var mainButton: Button
+    private lateinit var cancelButton: Button
+    private lateinit var mapsButton: Button
+    private lateinit var gpxButton: Button
+    private val updater = object : Runnable {
         override fun run() {
-            refresh()
-            timer.postDelayed(this, 1000)
+            render()
+            handler.postDelayed(this, 1000L)
         }
     }
-    private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
-    private fun text(value: String, size: Float, color: Int, bold: Boolean = false) =
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun label(value: String, size: Float, color: Int, bold: Boolean = false) =
         TextView(this).apply {
             text = value
             textSize = size
@@ -53,179 +54,218 @@ class MainActivity : Activity() {
             ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(0, dp(top), 0, dp(bottom))
         }
-    private fun rounded(color: Int) = GradientDrawable().apply {
+    private fun fill(color: Int) = GradientDrawable().apply {
         setColor(color)
-        cornerRadius = dp(12).toFloat()
+        cornerRadius = dp(14).toFloat()
     }
+    private fun btn(title: String, main: Boolean, action: () -> Unit) =
+        Button(this).apply {
+            text = title
+            isAllCaps = false
+            textSize = 16f
+            setTextColor(if (main) bg else textColor)
+            background = fill(if (main) mint else Color.rgb(36, 51, 65))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setOnClickListener { action() }
+        }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val mint = Color.rgb(60, 229, 176)
-        val white = Color.rgb(238, 246, 255)
-        val muted = Color.rgb(150, 166, 184)
-        window.statusBarColor = Color.rgb(8, 13, 22)
-        window.navigationBarColor = Color.rgb(8, 13, 22)
-        val root = LinearLayout(this).apply {
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(38), dp(24), dp(24))
-            setBackgroundColor(Color.rgb(8, 13, 22))
+            setBackgroundColor(bg)
+            setPadding(dp(24), dp(40), dp(24), dp(28))
         }
-        root.addView(text("PARKING LAB", 14f, mint, true))
-        root.addView(text("Notification Test v0.2", 26f, white, true), margin(14))
-        root.addView(text("Giữ bài test chạy nền v0.1. Cấp quyền đọc thông báo rồi gửi thông báo thử, kể cả khi khóa màn hình.", 14f, muted), margin(12))
-        status = text("CHƯA KÍCH HOẠT", 14f, mint, true)
-        root.addView(status, margin(32))
-        clock = text("00:00:00", 52f, white, true).apply { gravity = Gravity.CENTER_HORIZONTAL }
-        root.addView(clock, margin(18))
-        root.addView(text("THỜI GIAN TỪ LÚC KÍCH HOẠT", 11f, muted, true)
-            .apply { gravity = Gravity.CENTER_HORIZONTAL }, margin(8, 12))
-        start = Button(this).apply {
-            this.text = "KÍCH HOẠT"
-            setTextColor(Color.rgb(3, 25, 22))
-            background = rounded(mint)
-            setOnClickListener { requestStart() }
-        }
-        root.addView(start, margin(25))
-        stop = Button(this).apply {
-            this.text = "DỪNG / ĐẶT LẠI"
-            setTextColor(white)
-            background = rounded(Color.rgb(41, 54, 72))
-            setOnClickListener {
-                TimerStore.stop(this@MainActivity)
-                startService(Intent(this@MainActivity, StandbyService::class.java)
-                    .setAction(StandbyService.STOP))
-                refresh()
-            }
-        }
-        root.addView(stop, margin(10))
-        info = text("", 13f, muted)
-        root.addView(info, margin(24))
-        root.addView(text("BỘ NHẬN THÔNG BÁO", 15f, mint, true), margin(26))
-        root.addView(text(
-            "Thông báo FAKE ở đây là thông báo Android thật từ Parking Lab. " +
-            "Thông báo từ app khác sẽ được ghi nhận riêng.", 13f, muted), margin(8))
-        val accessButton = Button(this).apply {
-            text = "CẤP QUYỀN ĐỌC THÔNG BÁO"
-            setTextColor(white)
-            background = rounded(Color.rgb(41, 54, 72))
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            }
-        }
-        root.addView(accessButton, margin(16))
-        listenerInfo = text("", 13f, muted)
-        root.addView(listenerInfo, margin(10))
-        fakeButton = Button(this).apply {
-            text = "GỬI THÔNG BÁO FAKE"
-            setTextColor(Color.rgb(3, 25, 22))
-            background = rounded(mint)
-            setOnClickListener { requestFakeNotification() }
-        }
-        root.addView(fakeButton, margin(18))
-        root.addView(text("NHẬT KÝ NHẬN THÔNG BÁO", 14f, white, true), margin(26))
-        eventsInfo = text("", 13f, muted)
-        root.addView(eventsInfo, margin(8, 30))
-        val scroll = ScrollView(this).apply { isFillViewport = true }
-        scroll.addView(root)
-        setContentView(scroll)
-        refresh()
-    }
-    private fun listenerGranted(): Boolean {
-        if (Build.VERSION.SDK_INT >= 27) {
-            return getSystemService(NotificationManager::class.java)
-                .isNotificationListenerAccessGranted(ComponentName(this, ParkingNotificationListener::class.java))
-        }
-        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: ""
-        return enabled.split(":").any {
-            ComponentName.unflattenFromString(it)?.packageName == packageName
-        }
-    }
-    private fun requestFakeNotification() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 92)
-        } else postFakeNotification()
-    }
-    private fun postFakeNotification() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(
-            "parkinglab_test", "Parking Lab - fake notifications", NotificationManager.IMPORTANCE_DEFAULT))
-        fakeSequence += 1
-        val notice = Notification.Builder(this, "parkinglab_test")
-            .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle("FAKE: XE ĐÃ VÀO CỔNG")
-            .setContentText("BPA Parking Lab thử nghiệm số $fakeSequence")
-            .setWhen(System.currentTimeMillis())
-            .setAutoCancel(true)
-            .build()
-        manager.notify(2001, notice)
-    }
-    private fun requestStart() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 91)
-        } else runService()
-    }
-    override fun onRequestPermissionsResult(req: Int, permissions: Array<out String>, result: IntArray) {
-        super.onRequestPermissionsResult(req, permissions, result)
-        if (req == 91) runService()
-        if (req == 92) {
-            if (result.isNotEmpty() && result[0] == PackageManager.PERMISSION_GRANTED) {
-                postFakeNotification()
-            } else {
-                listenerInfo.text = "Chưa cấp quyền đăng thông báo, không thể gửi fake."
-            }
-        }
-    }
-    private fun runService() {
-        try {
-            if (!TimerStore.active(this)) TimerStore.start(this)
-            startForegroundService(Intent(this, StandbyService::class.java)
-                .setAction(StandbyService.START))
-            refresh()
-        } catch (ex: Exception) {
-            TimerStore.stop(this)
-            status.text = "LỖI: ${ex.javaClass.simpleName}"
-        }
-    }
-    private fun refresh() {
-        if (!::status.isInitialized) return
-        val active = TimerStore.active(this)
-        val elapsed = TimerStore.elapsed(this)
-        clock.text = TimerStore.time(elapsed)
-        status.text = when {
-            !active -> "CHƯA KÍCH HOẠT"
-            elapsed < 0 -> "PHÁT HIỆN KHỞI ĐỘNG LẠI MÁY"
-            else -> "STANDBY ĐÃ KÍCH HOẠT"
-        }
-        start.isEnabled = !active
-        stop.isEnabled = active
-        val age = TimerStore.beatAge(this)
-        info.text = "Nhịp dịch vụ: ${TimerStore.beats(this)}\n" +
-            "Lần cập nhật cuối: ${if (age < 0) "Chưa có" else "$age giây trước"}\n" +
-            "Số lần service khởi động lại: ${TimerStore.restarts(this)}\n" +
-            "Đã vuốt khỏi đa nhiệm: ${TimerStore.removedAt(this)}\n\n" +
-            "Timer dùng thời gian monotonic; nhịp dịch vụ xác nhận hoạt động nền. " +
-            "Android có thể trì hoãn nhịp khi ngủ sâu. Buộc dừng sẽ dừng service."
-        if (::listenerInfo.isInitialized) {
-            val granted = listenerGranted()
-            val connection = NotificationStore.connected(this)
-            listenerInfo.text = "Quyền Notification Access: " +
-                (if (granted) "ĐÃ CẤP" else "CHƯA CẤP") +
-                "\nListener đang kết nối: " + (if (connection) "CÓ" else "CHƯA") +
-                "\nĐã nhận fake: " + NotificationStore.ownCount(this) +
-                " | App khác: " + NotificationStore.externalCount(this)
-        }
-        if (::eventsInfo.isInitialized) {
-            eventsInfo.text = NotificationStore.recentText(this)
-        }
+        content.addView(label("BPA  /  PARKING LAB", 13f, mint, true))
+        content.addView(label("Chỗ đỗ của t", 29f, textColor, true), margin(12))
+        content.addView(label("Xác nhận ở cổng. Ghi đường đi. Lưu vị trí xe.", 14f, muted), margin(9))
+        stageLabel = label("CHỜ XÁC NHẬN", 20f, mint, true)
+        content.addView(stageLabel, margin(35))
+        explanation = label("", 15f, textColor)
+        content.addView(explanation, margin(13))
+        gpsInfo = label("", 14f, muted)
+        content.addView(gpsInfo, margin(16))
+        mainButton = btn("XÁC NHẬN BẮT ĐẦU", true) { onMainClick() }
+        content.addView(mainButton, margin(27))
+        cancelButton = btn("HỦY TRACKING", false) { confirmCancel() }
+        content.addView(cancelButton, margin(10))
+        mapsButton = btn("DẪN GOOGLE MAPS", true) { launchMaps() }
+        content.addView(mapsButton, margin(26))
+        gpxButton = btn("XUẤT HÀNH TRÌNH .GPX", false) { exportTrack() }
+        content.addView(gpxButton, margin(10))
+        hint = label("", 13f, muted)
+        content.addView(hint, margin(25, 25))
+        val scroller = ScrollView(this)
+        scroller.isFillViewport = true
+        scroller.addView(content)
+        setContentView(scroller)
+        render()
     }
     override fun onResume() {
         super.onResume()
-        timer.removeCallbacks(refreshLoop)
-        timer.post(refreshLoop)
+        handler.removeCallbacks(updater)
+        handler.post(updater)
     }
     override fun onPause() {
-        timer.removeCallbacks(refreshLoop)
+        handler.removeCallbacks(updater)
         super.onPause()
+    }
+    private fun onMainClick() {
+        if (TripStore.running(this)) saveParking() else askStart()
+    }
+    private fun askStart() {
+        val ask = mutableListOf<String>()
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            ask.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            ask.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            ask.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (ask.isNotEmpty()) {
+            requestPermissions(ask.toTypedArray(), 30)
+            return
+        }
+        startTracking()
+    }
+    override fun onRequestPermissionsResult(requestCode: Int,
+        permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 30) {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                    == PackageManager.PERMISSION_GRANTED) startTracking()
+            else AlertDialog.Builder(this)
+                .setMessage("Cần quyền Vị trí chính xác để ghi hành trình và lưu chỗ đỗ.")
+                .setPositiveButton("OK", null).show()
+        }
+    }
+    private fun startTracking() {
+        val gps = getSystemService(LOCATION_SERVICE) as LocationManager
+        if (!gps.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            AlertDialog.Builder(this).setMessage("Bật GPS/Vị trí trước khi bắt đầu.")
+                .setPositiveButton("Mở cài đặt") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }.setNegativeButton("Hủy", null).show()
+            return
+        }
+        try {
+            startForegroundService(Intent(this, TrackingService::class.java)
+                .setAction(TrackingService.START))
+        } catch (e: Exception) {
+            AlertDialog.Builder(this)
+                .setMessage("Không bật được tracking: ${e.javaClass.simpleName}")
+                .setPositiveButton("OK", null).show()
+        }
+        render()
+    }
+    private fun stopService() {
+        try {
+            startService(Intent(this, TrackingService::class.java)
+                .setAction(TrackingService.STOP))
+        } catch (_: Exception) { }
+    }
+    private fun saveParking() {
+        if (TripStore.count(this) == 0) {
+            Toast.makeText(this, "Chưa có tọa độ GPS chính xác để lưu.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!TripStore.save(this)) {
+            Toast.makeText(this, "Lỗi lưu: ${TripStore.message(this)}", Toast.LENGTH_LONG).show()
+            return
+        }
+        stopService()
+        render()
+    }
+    private fun confirmCancel() {
+        AlertDialog.Builder(this).setTitle("Hủy hành trình?")
+            .setMessage("Hành trình đang ghi sẽ bị xóa. Chỗ đỗ đã lưu trước đó vẫn còn.")
+            .setNegativeButton("Quay lại", null)
+            .setPositiveButton("Hủy") { _, _ ->
+                TripStore.cancel(this)
+                stopService()
+                render()
+            }.show()
+    }
+    private fun launchMaps() {
+        val lat = TripStore.parkLat(this) ?: return
+        val lon = TripStore.parkLon(this) ?: return
+        val dest = String.format(Locale.US, "%.7f,%.7f", lat, lon)
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW,
+                Uri.parse("google.navigation:q=$dest&mode=w"))
+                .setPackage("com.google.android.apps.maps"))
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$dest&travelmode=walking")))
+            } catch (_: Exception) {
+                Toast.makeText(this, "Không mở được Google Maps", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    private fun exportTrack() {
+        if (TripStore.savedRoute(this) == null) return
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/gpx+xml")
+            .putExtra(Intent.EXTRA_TITLE, "parking-route.gpx")
+        startActivityForResult(intent, 51)
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 51 && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try {
+                val xml = TripStore.gpx(this) ?: return
+                contentResolver.openOutputStream(uri)?.use {
+                    it.write(xml.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(this, "Đã xuất hành trình", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Lỗi xuất GPX: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    private fun render() {
+        if (!::stageLabel.isInitialized) return
+        val stage = TripStore.stage(this)
+        when (stage) {
+            TripStore.TRACK -> {
+                stageLabel.text = "ĐANG TRACKING"
+                explanation.text = "Đang ghi lại đường xe đi. App tự nhận diện trạng thái dừng; m cũng có thể lưu thủ công."
+                mainButton.text = "XÁC NHẬN ĐÃ ĐỖ · LƯU"
+            }
+            TripStore.STOP -> {
+                stageLabel.text = "XE CÓ VẺ ĐÃ DỪNG"
+                explanation.text = "Vị trí GPS đã ổn định. Nếu đây là chỗ đỗ, xác nhận lưu. Nếu chỉ dừng tạm thì cứ tiếp tục đi."
+                mainButton.text = "LƯU VỊ TRÍ ĐỖ"
+            }
+            TripStore.SAVED -> {
+                stageLabel.text = "ĐÃ LƯU ĐIỂM ĐỖ"
+                explanation.text = "Đã lưu lúc ${TripStore.savedDate(this)}. Dùng Google Maps để đi bộ quay lại xe."
+                mainButton.text = "BẮT ĐẦU LẦN MỚI"
+            }
+            else -> {
+                stageLabel.text = "CHỜ XÁC NHẬN"
+                explanation.text = "Khi tới cổng trường, bấm xác nhận. Trước đó app không sử dụng GPS."
+                mainButton.text = "XÁC NHẬN BẮT ĐẦU"
+            }
+        }
+        cancelButton.visibility = if (TripStore.running(this)) View.VISIBLE else View.GONE
+        mapsButton.visibility = if (TripStore.hasSaved(this)) View.VISIBLE else View.GONE
+        gpxButton.visibility = if (TripStore.savedRoute(this) != null) View.VISIBLE else View.GONE
+        val age = if (TripStore.lastFix(this) <= 0L) "Chưa có"
+            else "${((System.currentTimeMillis() - TripStore.lastFix(this)) / 1000L).coerceAtLeast(0L)} giây trước"
+        val acc = if (TripStore.accuracy(this) < 0) "—" else "${TripStore.accuracy(this).toInt()} m"
+        gpsInfo.text = if (TripStore.running(this) || stage == TripStore.SAVED)
+            "${TripStore.count(this)} điểm GPS  ·  ${TripStore.metres(this).toInt()} m\n" +
+                "GPS cập nhật: $age  ·  Sai số: $acc"
+        else "GPS đang tắt."
+        hint.text = TripStore.message(this).takeIf { it.isNotBlank() }
+            ?: "Lưu trên điện thoại. Google Maps dẫn tới tọa độ đã lưu, không tự chạy theo đường GPS gốc."
     }
 }

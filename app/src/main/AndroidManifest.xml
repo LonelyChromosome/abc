@@ -1,27 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-  <application android:label="Parking Lab" android:theme="@style/Theme.ParkingLab" android:allowBackup="false" android:supportsRtl="true">
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <application android:label="Parking Lab" android:theme="@style/Theme.ParkingLab"
+      android:allowBackup="false" android:supportsRtl="true">
     <activity android:name=".MainActivity" android:exported="true">
       <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
-    <service android:name=".StandbyService" android:exported="false"
-       android:stopWithTask="false" android:foregroundServiceType="specialUse">
-      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="user_started_timer_survival_test"/>
-    </service>
-    <service android:name=".ParkingNotificationListener"
-      android:label="Parking Lab - Notification Test"
-      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-      android:exported="true">
-      <intent-filter>
-        <action android:name="android.service.notification.NotificationListenerService" />
-      </intent-filter>
-    </service>
+    <service android:name=".TrackingService" android:exported="false"
+        android:foregroundServiceType="location" android:stopWithTask="false"/>
   </application>
 </manifest>
