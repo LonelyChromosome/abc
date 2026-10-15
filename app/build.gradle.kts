@@ -9,8 +9,8 @@ android {
     applicationId = "com.lonelychromosome.parkinglab"
     minSdk = 26
     targetSdk = 35
-    versionCode = 4
-    versionName = "0.4.0"
+    versionCode = 5
+    versionName = "0.5.0"
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -18,7 +18,6 @@ android {
   }
   kotlinOptions { jvmTarget = "17" }
 }
-
 dependencies {
   implementation("com.google.android.gms:play-services-location:21.3.0")
 }

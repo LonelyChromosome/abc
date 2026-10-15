@@ -1,22 +1,14 @@
-# BPA Parking Lab v0.4 — Google Play Services geofence
+# BPA Parking Lab 0.5 — custom schedule, two Google geofences, GPS + walking
 
-## Auto flow
-- On first run, tap **BẬT TỰ ĐỘNG 100M**, grant precise location and in Settings choose **Allow all the time**. This is explicit opt-in.
-- Geofence center: 20.96110, 105.74746, a publicly mapped Phenikaa University reference near the Google Maps place ID `ChIJ40w5_-9SNDERZORbMtQ5Gjk`. Radius is 100 metres **from this point, not from the university perimeter**. The point is approximate and not independently verified identical to Google's own pin coordinates.
-- Google Play Services monitors transitions without Parking Lab polling GPS in the waiting stage.
-- On ENTER, Android attempts to start the user-authorized location foreground service for the existing GPS route recorder. Geofencing events may be significantly delayed while backgrounded: 100m is not an instantaneous promise.
-- Once tracking, app suggests a stop, user confirms parking to save the route and GPS coordinate. Google Maps opens pedestrian navigation to the saved coordinate. A manual Start option remains.
-- Suppress new auto starts until receiving an EXIT event after a trip, to avoid repeated starts on stop/save.
-- Re-register geofence on reboot or app update, while opt-in remains enabled.
+Only repo `LonelyChromosome/abc`. Not integrated with BPA, QLDT, DemoF3, Phenikaa Uni or any external backend.
 
-## Privacy and caveats
-- No Phenikaa app access, login, push, API, backend, GPS while waiting, or internet permission in Parking Lab. No server-side tracking.
-- Google Play Services may use sensors/location internally for its geofencing.
-- On Android 10+, background geofencing requires background location; on Android 14+, launching a location FGS from the background requires background location plus applicable exception. User grants these manually.
-- The automatic start may be delayed, suppressed by OS/OEM, or not trigger when the mapped center differs from the gate.
-- Last route saved privately as CSV, GPX export available. Google Maps is for navigation to the point; it does not follow the original trip polyline.
-- Debug APK signing might differ across CI runs.
+Flow: enter a weekly custom lesson schedule as lines like `T2 07:30`, `T4 13:00` or `CN 08:00`. Enable scheduled waiting (requires Android precise location, **Allow all the time** background location, Physical activity for auto confirmation). About 30 minutes before class start, arm two Google Play Services geofences: 100m around (20.962668790883644, 105.74871859259113), and 100m around (20.959607109088672, 105.74789745697416). Remain armed until 60 minutes after class start to accommodate arrivals. Event ENTER triggers GPS location foreground service. If GPS route is at least 35m, vehicle remains slow and inside 12m for about 6s, mark parked-candidate. After 10 real seconds of consecutive step-detector events and >=8 steps, reverse-scan the stationary GPS cluster *before walking* and save bike position and track automatically. Stop GPS and allow Google Maps walking navigation to saved position. Buttons remain to manually start or save where GPS or sensors are unreliable. Saved last route is GPX-exportable.
 
-Source: https://www.google.com/maps/place/?q=place_id:ChIJ40w5_-9SNDERZORbMtQ5Gjk
+Limitations:
+- These are two 100m radii around coordinates supplied by the user, **not** entire campus perimeter. Geofencing is best effort, can arrive late under OS restrictions, and 100m is not a guaranteed instant threshold. Google Play Services owns location sampling while waiting; Parking Lab itself does not poll GPS continuously.
+- Calendar scheduling uses AlarmManager; Android may delay inexact alarms unless exact-alarm privileges are granted. Class times are custom/local, not linked to actual BPA.
+- Step detector may not exist on all phones and ACTIVITY_RECOGNITION is required on Android 10+. No proof of exact position to within 1–2m. Reverse interpolation is a robust median of low-speed GPS points, not a physical guarantee.
+- If foreground service is blocked by Android/OEM battery saver, auto tracking may fail. Inspect logs and use manual fallback.
+- Android app stays in the same package; debug APK signing can vary in CI.
 
-Repo: LonelyChromosome/abc. DemoF3 is not modified.
+Build workflow: `.github/workflows/android.yml`.
