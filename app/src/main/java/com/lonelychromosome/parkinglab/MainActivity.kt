@@ -314,12 +314,12 @@ class MainActivity : Activity() {
         val gpsAge = if (TripStore.lastFix(this) == 0L) "Chưa có"
             else "${((System.currentTimeMillis() - TripStore.lastFix(this)) / 1000L).coerceAtLeast(0L)}s trước"
         gpsInfo.text = "${TripStore.count(this)} điểm GPS · ${TripStore.metres(this).toInt()}m" +
-            "\\nGPS: $gpsAge · sai số: ${TripStore.accuracy(this).toInt()}m"
+            "\nGPS: $gpsAge · sai số: ${TripStore.accuracy(this).toInt()}m"
         autoButton.text = if (ClassSchedule.enabled(this)) "TẮT CHỜ THEO LỊCH" else "BẬT CHỜ THEO LỊCH"
-        classInfo.text = ClassSchedule.nextStatus(this) + "\\n" +
-            "Vùng 1: 20.962668790883644, 105.74871859259113\\n" +
-            "Vùng 2: 20.959607109088672, 105.74789745697416\\n" +
-            "Google: " + CampusFence.status(this) + "\\n" +
+        classInfo.text = ClassSchedule.nextStatus(this) + "\n" +
+            "Vùng 1: 20.962668790883644, 105.74871859259113\n" +
+            "Vùng 2: 20.959607109088672, 105.74789745697416\n" +
+            "Google: " + CampusFence.status(this) + "\n" +
             "Lần cuối: " + CampusFence.event(this) + " " + CampusFence.eventTime(this)
         hint.text = TripStore.message(this).takeIf { it.isNotBlank() }
             ?: "Lịch nhập thủ công. Track chỉ lưu trong máy. Android có thể báo geofence muộn."

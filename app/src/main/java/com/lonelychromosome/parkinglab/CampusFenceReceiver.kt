@@ -22,11 +22,12 @@ class CampusFenceReceiver : BroadcastReceiver() {
             }
             Geofence.GEOFENCE_TRANSITION_ENTER -> {
                 CampusFence.record(context, "Vào vùng: $ids")
-                if (CampusFence.suppressed(context) || TripStore.running(context)) return
+                if (CampusFence.suppressed(context) || TripStore.running(context) ||
+                    ClassSchedule.alreadyTriggered(context)) return
                 if (!CampusFence.ready(context)) return
                 try {
                     context.startForegroundService(
-                        Intent(context, TrackingService::class.java).setAction(TrackingService.START))
+                        Intent(context, TrackingService::class.java).setAction(TrackingService.AUTO_START))
                     CampusFence.suppress(context, true)
                 } catch (e: Exception) {
                     CampusFence.record(context, "Không khởi động được GPS: " + e.javaClass.simpleName)

@@ -18,6 +18,7 @@ import android.os.*
 class TrackingService : Service(), LocationListener, SensorEventListener {
     companion object {
         const val START = "parkinglab.START_GPS"
+        const val AUTO_START = "parkinglab.AUTO_START_GPS"
         const val STOP = "parkinglab.STOP_GPS"
         private const val CHANNEL = "parking_gps_v5"
         private const val NOTICE = 3003
@@ -50,7 +51,7 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
             shutdown()
             return START_NOT_STICKY
         }
-        if (intent?.action == START && !TripStore.running(this)) TripStore.begin(this)
+        if ((intent?.action == START || intent?.action == AUTO_START) && !TripStore.running(this)) TripStore.begin(this)
         if (!TripStore.running(this)) {
             stopSelf()
             return START_NOT_STICKY
@@ -87,6 +88,7 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
             TripStore.alert(this, "Không khởi động GPS: " + ex.javaClass.simpleName)
             return START_NOT_STICKY
         }
+        if (intent?.action == AUTO_START) ClassSchedule.markTriggered(this)
         handler.removeCallbacks(refresh)
         handler.post(refresh)
         return START_STICKY

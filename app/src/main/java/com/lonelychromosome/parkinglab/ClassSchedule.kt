@@ -62,6 +62,17 @@ object ClassSchedule {
         }
         return result
     }
+    private fun currentSession(c: Context, now: Long = System.currentTimeMillis()): Long? =
+        if (!enabled(c)) null else windows(c, now)
+            .filter { now in it.start..it.end }.minByOrNull { it.start }?.start
+    fun alreadyTriggered(c: Context): Boolean {
+        val key = currentSession(c) ?: return false
+        return p(c).getLong("autoSession", Long.MIN_VALUE) == key
+    }
+    fun markTriggered(c: Context) {
+        val key = currentSession(c) ?: return
+        p(c).edit().putLong("autoSession", key).apply()
+    }
     fun inWindow(c: Context, now: Long = System.currentTimeMillis()): Boolean =
         enabled(c) && windows(c, now).any { now in it.start..it.end }
 
