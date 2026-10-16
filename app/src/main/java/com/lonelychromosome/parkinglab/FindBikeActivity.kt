@@ -164,7 +164,7 @@ class FindBikeActivity : Activity(), OnMapReadyCallback {
     }
     private fun poly(points:List<GeoPoint>,color:Int,width:Float,dash:Boolean=false,z:Float=2f){
         if(points.size<2)return
-        val o=PolylineOptions().addAll(points.map(::ll)).color(color).width(dp(width).toFloat()).zIndex(z)
+        val o=PolylineOptions().addAll(points.map(::ll)).color(color).width(width*resources.displayMetrics.density).zIndex(z)
         if(dash)o.pattern(listOf(Dash(dp(12).toFloat()),Gap(dp(9).toFloat())))
         map?.addPolyline(o)
     }
