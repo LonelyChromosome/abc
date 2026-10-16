@@ -315,7 +315,10 @@ class MainActivity : Activity() {
             }
         }
         cancelButton.visibility = if (TripStore.running(this)) View.VISIBLE else View.GONE
-        mapButton.visibility = if (TripStore.hasSaved(this)) View.VISIBLE else View.GONE
+        mapButton.visibility = if (TripStore.running(this) || TripStore.hasSaved(this)) View.VISIBLE else View.GONE
+        mapButton.text = if (TripStore.running(this))
+            "XEM TRACE GPS TRỰC TIẾP TRÊN MAP"
+        else "DẪN ĐƯỜNG · GPS HIỆN TẠI → TRACKED"
         gpxButton.visibility = if (TripStore.savedRoute(this) != null) View.VISIBLE else View.GONE
         val gpsAge = if (TripStore.lastFix(this) == 0L) "Chưa có"
             else "${((System.currentTimeMillis() - TripStore.lastFix(this)) / 1000L).coerceAtLeast(0L)}s trước"
