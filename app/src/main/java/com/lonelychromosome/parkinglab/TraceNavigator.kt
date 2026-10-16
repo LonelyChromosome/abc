@@ -39,7 +39,7 @@ object TraceNavigator {
         return BikeTrip(bike, trace, false)
     }
 
-    /** Explicit test case from the user's 29-point GPX, never silently treated as a parked bike. */
+    /** Legacy reference example removed: real GPS tracking only. */
     fun referenceTrip(context: Context): BikeTrip {
         val points = context.assets.open("reference_trace_29.txt").bufferedReader().use { reader ->
             reader.readLines().mapNotNull { row ->
