@@ -147,18 +147,25 @@ class FieldMapView(ctx:Context) : View(ctx) {
     init {
         bitmap?.let { b ->
             for(y in 0 until nY)for(x in 0 until nX){
-                val rx=((x+.5)*mapWidth/nX/b.width* b.width).toFloat()
-                val ry=((y+.5)*mapHeight/nY/b.height*b.height).toFloat()
-                val xx=(rx*b.width/mapWidth).toInt().coerceIn(0,b.width-1)
-                val yy=(ry*b.height/mapHeight).toInt().coerceIn(0,b.height-1)
-                val v=b.getPixel(xx,yy)
-                val r=Color.red(v);val g=Color.green(v);val bl=Color.blue(v)
-                val dark=r<105&&g<105&&bl<115
-                val gray=(r in 160..244 && g in 163..245 && bl in 165..249 &&
-                    abs(r-g)<17 && abs(g-bl)<21 && bl-r<25)
-                val road=(bl-r>=18 && bl-g>=7 && r in 65..205 && g in 95..225)
-                blocked[y*nX+x]= dark || (gray && !road)
-                preferred[y*nX+x]=road
+                val cx=((x+.5f)*b.width/nX).toInt().coerceIn(0,b.width-1)
+                val cy=((y+.5f)*b.height/nY).toInt().coerceIn(0,b.height-1)
+                var grayVotes=0
+                var roadVotes=0
+                var wallVotes=0
+                for(oy in -3..3 step 3)for(ox in -3..3 step 3){
+                    val px=(cx+ox).coerceIn(0,b.width-1)
+                    val py=(cy+oy).coerceIn(0,b.height-1)
+                    val v=b.getPixel(px,py)
+                    val r=Color.red(v);val g=Color.green(v);val bl=Color.blue(v)
+                    // Walls are neutral dark. Dark-blue road edges must NOT be treated as walls.
+                    if(r<110&&g<110&&bl<125&&abs(r-g)<18&&abs(g-bl)<21)wallVotes++
+                    if(r in 168..240 && g in 169..242 && bl in 173..245 &&
+                        abs(r-g)<13 && abs(g-bl)<17 && bl-r<19)grayVotes++
+                    if(bl-r>=22&&bl-g>=8&&r in 60..207&&g in 85..226)roadVotes++
+                }
+                // Vote against antialiasing artifacts at the borders of yellow buildings.
+                blocked[y*nX+x]=wallVotes>0 || (grayVotes>=5 && roadVotes<3)
+                preferred[y*nX+x]=roadVotes>=2
             }
             // Expand forbidden interiors so diagonal grid paths cannot cut the corners.
             val original=blocked.copyOf()
