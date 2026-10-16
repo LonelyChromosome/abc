@@ -82,7 +82,7 @@ object ClassSchedule {
         am.cancel(alarm(c))
         if (!enabled(c)) {
             CampusFence.remove(c)
-            if (!TripStore.running(c) && !NavState.active(c)) FieldStatus.disabled(c)
+            if (!TripStore.running(c) && !NavState.active(c) && !TripStore.hasSaved(c)) FieldStatus.disabled(c)
             return
         }
         val now = System.currentTimeMillis()
