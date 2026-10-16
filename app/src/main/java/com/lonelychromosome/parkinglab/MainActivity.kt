@@ -161,6 +161,9 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 29 &&
             checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED)
             needed.add(Manifest.permission.ACTIVITY_RECOGNITION)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+            needed.add(Manifest.permission.POST_NOTIFICATIONS)
         if (needed.isNotEmpty()) {
             requestPermissions(needed.toTypedArray(), 32)
             return
