@@ -6,11 +6,11 @@ android {
   namespace = "com.lonelychromosome.parkinglab"
   compileSdk = 35
   defaultConfig {
-    applicationId = "com.lonelychromosome.parkinglab"
+    applicationId = "com.lonelychromosome.parkinglab.findbiketest"
     minSdk = 26
     targetSdk = 35
     versionCode = 7
-    versionName = "0.6.1-findbike-test"
+    versionName = "0.6.1-findbike-test-standalone"
   }
   defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = providers.environmentVariable("BPA_MAPS_API_KEY").orElse(providers.gradleProperty("BPA_MAPS_API_KEY")).orElse("NO_KEY").get()
   compileOptions {
