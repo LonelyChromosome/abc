@@ -93,7 +93,7 @@ class MainActivity : Activity() {
         root.addView(mainButton, margin(18))
         cancelButton = button("HỦY TRACKING") { cancel() }
         root.addView(cancelButton, margin(9))
-        mapButton = button("TÌM XE · FIND BIKE", true) { launchFindBike() }
+        mapButton = button("DẪN ĐƯỜNG · VỊ TRÍ GPS → TRACKED", true) { launchFindBike() }
         root.addView(mapButton, margin(22))
         gpxButton = button("XUẤT TRACK GPX") { exportGpx() }
         root.addView(gpxButton, margin(8))
@@ -238,7 +238,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Chưa có GPS để lưu", Toast.LENGTH_SHORT).show()
             return
         }
-        if (TripStore.save(this)) stopGps()
+        if (TripStore.save(this)) { stopGps(); FieldStatus.tracked(this,TripStore.accuracy(this)) }
         else Toast.makeText(this, TripStore.message(this), Toast.LENGTH_LONG).show()
         render()
     }
@@ -300,13 +300,13 @@ class MainActivity : Activity() {
                 mainButton.text = "LƯU ĐIỂM ĐỖ THỦ CÔNG"
             }
             TripStore.SAVED -> {
-                stageLabel.text = "ĐÃ LƯU VỊ TRÍ XE"
+                stageLabel.text = "TRACKED · ĐÃ LƯU VỊ TRÍ XE"
                 explanation.text = (if (TripStore.autoSaved(this)) "Tự xác minh đi bộ 10s. " else "Lưu thủ công. ") +
                     "Lưu lúc ${TripStore.savedDate(this)}"
                 mainButton.text = "BẮT ĐẦU HÀNH TRÌNH MỚI"
             }
             else -> {
-                stageLabel.text = "CHỜ THEO LỊCH"
+                stageLabel.text = if (ClassSchedule.enabled(this)) (if (ClassSchedule.inWindow(this)) "CHỜ 100 M" else "HẸN GIỜ") else "CHƯA BẬT HẸN GIỜ"
                 explanation.text = "Tự động chờ từ 30 phút trước giờ học đã nhập, chỉ bật GPS sau khi vào vùng 100m."
                 mainButton.text = "BẮT ĐẦU GPS THỦ CÔNG"
             }
