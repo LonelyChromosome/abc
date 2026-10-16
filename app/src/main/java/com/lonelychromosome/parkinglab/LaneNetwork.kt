@@ -19,6 +19,7 @@ data class GeoPoint(val lat: Double, val lon: Double) {
 
 class LaneNetwork private constructor(
     val lanes: List<List<GeoPoint>>,
+    val simulatedStarts: List<Pair<String, GeoPoint>>,
     val isDraft: Boolean,
     val pixelPerMeter: Double,
     private val vertices: List<GeoPoint>,
@@ -149,7 +150,14 @@ class LaneNetwork private constructor(
                     }
                 }
             }
-            return LaneNetwork(lanes, true, scale,
+            val starts = json.optJSONArray("testStarts")?.let { entries ->
+                (0 until entries.length()).map { k ->
+                    val entry = entries.getJSONObject(k)
+                    val pixel = entry.getJSONArray("pixel")
+                    entry.getString("name") to project(pixel.getDouble(0), pixel.getDouble(1))
+                }
+            } ?: emptyList()
+            return LaneNetwork(lanes, starts, true, scale,
                 nodes.map { it.point }, connections.map { it.toMap() })
         }
     }
