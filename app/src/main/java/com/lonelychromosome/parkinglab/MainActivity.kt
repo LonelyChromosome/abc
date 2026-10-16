@@ -93,7 +93,7 @@ class MainActivity : Activity() {
         root.addView(mainButton, margin(18))
         cancelButton = button("HỦY TRACKING") { cancel() }
         root.addView(cancelButton, margin(9))
-        mapButton = button("DẪN ĐƯỜNG GOOGLE MAPS", true) { launchMaps() }
+        mapButton = button("TÌM XE · FIND BIKE", true) { launchFindBike() }
         root.addView(mapButton, margin(22))
         gpxButton = button("XUẤT TRACK GPX") { exportGpx() }
         root.addView(gpxButton, margin(8))
@@ -252,6 +252,9 @@ class MainActivity : Activity() {
         val b = CampusFence.CENTERS[1].joinToString(",")
         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
             "https://www.google.com/maps/dir/?api=1&origin=$a&destination=$b")))
+    }
+    private fun launchFindBike() {
+        startActivity(Intent(this, FindBikeActivity::class.java))
     }
     private fun launchMaps() {
         val a = TripStore.parkLat(this) ?: return
