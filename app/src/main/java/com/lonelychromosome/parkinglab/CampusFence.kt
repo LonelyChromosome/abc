@@ -57,7 +57,7 @@ object CampusFence {
         val request = GeofencingRequest.Builder().addGeofences(fences).build()
         try {
             LocationServices.getGeofencingClient(c).addGeofences(request, pending(c))
-                .addOnSuccessListener { note(c, "Google đã nhận 2 geofence · bán kính 100m"); FieldStatus.waiting(c) }
+                .addOnSuccessListener { note(c, "Google đã nhận 2 geofence · bán kính 100m"); if(!TripStore.hasSaved(c) && !TripStore.running(c)) FieldStatus.waiting(c) }
                 .addOnFailureListener { note(c, "Đăng ký thất bại: " + it.message.orEmpty().take(90)); FieldStatus.error(c,"Đăng ký geofence thất bại") }
         } catch (e: Exception) { note(c, "Lỗi Google Geofence: " + e.javaClass.simpleName) }
     }
