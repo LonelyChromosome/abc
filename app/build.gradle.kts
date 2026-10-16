@@ -9,9 +9,10 @@ android {
     applicationId = "com.lonelychromosome.parkinglab"
     minSdk = 26
     targetSdk = 35
-    versionCode = 5
-    versionName = "0.5.0"
+    versionCode = 6
+    versionName = "0.6.0-preview"
   }
+  defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = providers.environmentVariable("BPA_MAPS_API_KEY").orElse(providers.gradleProperty("BPA_MAPS_API_KEY")).orElse("NO_KEY").get()
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
@@ -20,4 +21,5 @@ android {
 }
 dependencies {
   implementation("com.google.android.gms:play-services-location:21.3.0")
+  implementation("com.google.android.gms:play-services-maps:19.2.0")
 }
