@@ -82,6 +82,7 @@ object ClassSchedule {
         am.cancel(alarm(c))
         if (!enabled(c)) {
             CampusFence.remove(c)
+            if (!TripStore.running(c) && !NavState.active(c)) FieldStatus.disabled(c)
             return
         }
         val now = System.currentTimeMillis()
@@ -89,7 +90,10 @@ object ClassSchedule {
         if (relevant.any { now in it.start..it.end }) {
             if (CampusFence.ready(c)) CampusFence.register(c)
             else CampusFence.note(c, "Chưa có quyền vị trí chính xác / mọi lúc")
-        } else CampusFence.remove(c)
+        } else {
+            CampusFence.remove(c)
+            if (!TripStore.running(c) && !NavState.active(c)) FieldStatus.scheduled(c,"Hẹn giờ theo lịch. Chưa ghi GPS. Geofence chỉ bật trong khung giờ.")
+        }
 
         val next = relevant.flatMap { listOf(it.start, it.end + 1000L) }
             .filter { it > now + 1000L }.minOrNull()
