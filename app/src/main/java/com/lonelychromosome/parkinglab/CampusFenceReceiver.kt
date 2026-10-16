@@ -28,6 +28,7 @@ class CampusFenceReceiver : BroadcastReceiver() {
                 try {
                     context.startForegroundService(
                         Intent(context, TrackingService::class.java).setAction(TrackingService.AUTO_START))
+                    FieldStatus.tracking(context)
                     CampusFence.suppress(context, true)
                 } catch (e: Exception) {
                     CampusFence.record(context, "Không khởi động được GPS: " + e.javaClass.simpleName)
