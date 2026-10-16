@@ -82,7 +82,11 @@ class InteractiveLaneView(context: Context, private val network: LaneNetwork) : 
         route?.let{
             line(c,it.walkToLane,Color.rgb(255,191,93),3f,true)
             line(c,it.lanePart,Color.rgb(36,222,163),5f)
-            line(c,it.approachPart,Color.rgb(255,150,62),4f,true)
+            it.approachPart.zipWithNext{a,b->
+                val onLane=(network.nearest(a)?.distance ?: 999.0)<6.0 &&
+                    (network.nearest(b)?.distance ?: 999.0)<6.0
+                line(c,listOf(a,b),Color.rgb(255,150,62),4f,!onLane)
+            }
         }
         network.simulatedStarts.forEach{dot(c,it.second,Color.rgb(90,130,156))}
         dot(c,trip?.bike,Color.rgb(250,74,94));dot(c,origin,Color.rgb(29,229,238))
