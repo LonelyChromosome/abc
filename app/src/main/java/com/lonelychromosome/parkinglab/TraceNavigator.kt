@@ -39,19 +39,6 @@ object TraceNavigator {
         return BikeTrip(bike, trace, false)
     }
 
-    /** Legacy reference example removed: real GPS tracking only. */
-    fun referenceTrip(context: Context): BikeTrip {
-        val points = context.assets.open("reference_trace_29.txt").bufferedReader().use { reader ->
-            reader.readLines().mapNotNull { row ->
-                val values = row.split(',')
-                val lat = values.getOrNull(0)?.toDoubleOrNull()
-                val lon = values.getOrNull(1)?.toDoubleOrNull()
-                if (lat == null || lon == null) null else GeoPoint(lat,lon)
-            }
-        }
-        return BikeTrip(GeoPoint(20.959505, 105.747637), points, true)
-    }
-
     fun plan(network: LaneNetwork, user: GeoPoint, trip: BikeTrip): Plan? {
         val bike = trip.bike
         if (trip.trace.size < 2) {
