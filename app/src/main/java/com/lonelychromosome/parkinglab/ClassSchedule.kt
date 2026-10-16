@@ -92,7 +92,7 @@ object ClassSchedule {
             else CampusFence.note(c, "Chưa có quyền vị trí chính xác / mọi lúc")
         } else {
             CampusFence.remove(c)
-            if (!TripStore.running(c) && !NavState.active(c)) FieldStatus.scheduled(c,"Hẹn giờ theo lịch. Chưa ghi GPS. Geofence chỉ bật trong khung giờ.")
+            if (!TripStore.running(c) && !NavState.active(c) && !TripStore.hasSaved(c)) FieldStatus.scheduled(c,"Hẹn giờ theo lịch. Chưa ghi GPS. Geofence chỉ bật trong khung giờ.")
         }
 
         val next = relevant.flatMap { listOf(it.start, it.end + 1000L) }
