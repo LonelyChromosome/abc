@@ -7,7 +7,7 @@ import android.location.Location
 object NavState {
     private fun p(c:Context)=c.getSharedPreferences("fmb_navigation_live_1", Context.MODE_PRIVATE)
     fun active(c:Context)=p(c).getBoolean("active",false)
-    fun started(c:Context) {p(c).edit().putBoolean("active",true).remove("lat").remove("lon").remove("fixTime").apply()}
+    fun started(c:Context) {p(c).edit().putBoolean("active",true).remove("endedAt").remove("lat").remove("lon").remove("fixTime").apply()}
     fun ended(c:Context){p(c).edit().putBoolean("active",false).apply()}
     fun fix(c:Context,location:Location){
         if(!location.hasAccuracy()||location.accuracy>40f)return
