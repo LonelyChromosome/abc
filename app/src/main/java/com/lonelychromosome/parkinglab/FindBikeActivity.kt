@@ -155,10 +155,10 @@ class FindBikeActivity : Activity() {
             TripStore.latitude(this)!=null && TripStore.longitude(this)!=null &&
             (System.currentTimeMillis()-TripStore.lastFix(this))<15_000L)
             GeoPoint(TripStore.latitude(this)!!,TripStore.longitude(this)!!) else null
-        val bike=if(lat!=null&&lon!=null) GeoPoint(lat,lon) else null
+        val bike=if(!TripStore.running(this) && lat!=null&&lon!=null) GeoPoint(lat,lon) else null
         val recorded=TripStore.traceForMap(this)
         map.setTrace(recorded)
-        map.setGps(current,if(navigating)bike else null,navigating)
+        map.setGps(current,bike,navigating)
         start.isEnabled=bike!=null
         stop.visibility=if(NavState.active(this)) View.VISIBLE else View.GONE
         calibrate.text="TRACE TÍM: GPS ghi lại (${recorded.size} điểm) · XANH: tuyến về xe\n" +
