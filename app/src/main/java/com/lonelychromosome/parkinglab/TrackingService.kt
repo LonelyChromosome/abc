@@ -96,7 +96,11 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
         return START_STICKY
     }
     override fun onLocationChanged(location: Location) {
+        val before=TripStore.stage(this)
         TripStore.onFix(this, location)
+        val after=TripStore.stage(this)
+        if(before!=after && after==TripStore.STOP) FieldStatus.stopped(this,0,0)
+        else if(before!=after && after==TripStore.TRACK) FieldStatus.tracking(this)
     }
     override fun onProviderDisabled(provider: String) {
         TripStore.alert(this, "GPS đã tắt: bật lại để ghi hành trình")
