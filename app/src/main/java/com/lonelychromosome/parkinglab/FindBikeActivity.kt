@@ -2,6 +2,7 @@ package com.lonelychromosome.parkinglab
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
