@@ -247,7 +247,7 @@ class MainActivity : Activity() {
     }
     private fun cancel() {
         AlertDialog.Builder(this).setTitle("Hủy hành trình?")
-            .setPositiveButton("Hủy") { _, _ -> TripStore.cancel(this); stopGps(); render() }
+            .setPositiveButton("Hủy") { _, _ -> TripStore.cancel(this); stopGps(); FieldStatus.ended(this); render() }
             .setNegativeButton("Quay lại", null).show()
     }
     private fun showPinMap() {
