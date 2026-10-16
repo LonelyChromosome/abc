@@ -172,7 +172,7 @@ class FindBikeActivity : Activity(), OnMapReadyCallback {
                 }
             }
             position?.let {
-                map.addMarker(MarkerOptions().position(latLng(it)).title("Vị trí hiện tại")
+                map.addMarker(MarkerOptions().position(latLng(it)).title("Điểm xuất phát GIẢ LẬP")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))
             }
             plan?.let { p ->
@@ -202,7 +202,7 @@ class FindBikeActivity : Activity(), OnMapReadyCallback {
             if (googleMapView == null) append("\nChưa có Google Maps API key: đang xem sơ đồ lane không nền.")
             if (currentTrip == null) append("\nChưa lưu xe. Có thể bấm THỬ GPX 29 ĐIỂM.")
             else {
-                append("\nTEST: vị trí xuất phát giả lập, xe thật đã xác nhận, GPX 29 điểm.")
+                append("\nTEST KHÔNG GPS: điểm xuất phát giả lập, xe đã xác nhận, GPX 29 điểm.")
                 append("\nĐiểm đi: ").append(network.simulatedStarts.getOrNull(simulatedOriginIndex)?.first ?: "Chưa thiết lập")
                 if (start == null) append("\nChưa có điểm xuất phát mô phỏng.")
                 if (navigating) {
