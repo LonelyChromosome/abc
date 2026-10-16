@@ -42,7 +42,7 @@ class FieldMapView(ctx:Context) : View(ctx) {
     private fun src(x:Float,y:Float)=PointF((x-left())/factor(),(y-top())/factor())
     fun setGps(now:GeoPoint?,bike:GeoPoint?,follow:Boolean=false) {
         person=now;parked=bike
-        path=if(now!=null&&bike!=null&&calibration.has()) {
+        path=if(follow&&now!=null&&bike!=null&&calibration.has()) {
             val a=calibration.point(now.lat,now.lon)
             val b=calibration.point(bike.lat,bike.lon)
             if(calibration.validPixel(a)&&calibration.validPixel(b)) pathfind(a,b) else emptyList()
