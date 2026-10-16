@@ -20,6 +20,7 @@ data class GeoPoint(val lat: Double, val lon: Double) {
 class LaneNetwork private constructor(
     val lanes: List<List<GeoPoint>>,
     val simulatedStarts: List<Pair<String, GeoPoint>>,
+    val estimatedLinks: List<Pair<GeoPoint, GeoPoint>>,
     val isDraft: Boolean,
     val pixelPerMeter: Double,
     private val vertices: List<GeoPoint>,
@@ -110,10 +111,18 @@ class LaneNetwork private constructor(
             data class PixelNode(val x: Double, val y: Double, val point: GeoPoint)
             val nodes = mutableListOf<PixelNode>()
             val connections = mutableListOf<MutableMap<Int, Double>>()
+            val inferredJunctions = mutableListOf<Pair<GeoPoint,GeoPoint>>()
             // Densify the user-drawn lanes; merge close junctions, not entire parking areas.
             fun node(x: Double, y: Double): Int {
                 val found = nodes.indexOfFirst { hypot(it.x - x, it.y - y) <= 8.0 }
-                if (found >= 0) return found
+                if (found >= 0) {
+                    // A small gap between independently drawn roads is a possible link,
+                    // NOT a confirmed piece of road. Show this bridge as a dashed segment.
+                    if (found != nodes.lastIndex && hypot(nodes[found].x-x, nodes[found].y-y) > 3.0) {
+                        inferredJunctions.add(nodes[found].point to project(x,y))
+                    }
+                    return found
+                }
                 nodes.add(PixelNode(x, y, project(x, y)))
                 connections.add(mutableMapOf())
                 return nodes.lastIndex
@@ -157,7 +166,7 @@ class LaneNetwork private constructor(
                     entry.getString("name") to project(pixel.getDouble(0), pixel.getDouble(1))
                 }
             } ?: emptyList()
-            return LaneNetwork(lanes, starts, true, scale,
+            return LaneNetwork(lanes, starts, inferredJunctions, true, scale,
                 nodes.map { it.point }, connections.map { it.toMap() })
         }
     }
