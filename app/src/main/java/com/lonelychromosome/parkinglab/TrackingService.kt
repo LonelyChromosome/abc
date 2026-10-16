@@ -107,7 +107,9 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
     }
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type != Sensor.TYPE_STEP_DETECTOR) return
-        if (TripStore.onStep(this, event.timestamp / 1_000_000L)) {
+        val didFinish=TripStore.onStep(this, event.timestamp / 1_000_000L)
+        if(!didFinish && TripStore.stage(this)==TripStore.STOP) FieldStatus.stopped(this,TripStore.stepCount(this),TripStore.walkElapsed(this))
+        if (didFinish) {
             CampusFence.record(this, "Đã nhận đi bộ 10s · lưu điểm đỗ nội suy ngược")
             FieldStatus.tracked(this,TripStore.accuracy(this))
             shutdown()
