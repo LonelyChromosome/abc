@@ -201,7 +201,7 @@ class FindBikeActivity : Activity(), OnMapReadyCallback {
         path=if(start!=null&&trip!=null)TraceNavigator.plan(network,start!!,trip!!) else null
         val originName=network.simulatedStarts.find{it.second==start}?.first ?: "Đã chọn trên bản đồ"
         info.text=if(path!=null)
-            "TỪ: "+originName+"      →      XE: KTX B / CỔNG PHỤ"+
+            "TỪ: "+originName+"      →      XE ĐÃ GHI"+
             "\nTUYẾN: "+path!!.metres.roundToInt()+" m  ·  Nối trace tại điểm #"+(path!!.traceEntryIndex+1)
         else "TỪ: "+originName+"\nCHƯA TÌM ĐƯỢC LỐI KHỚP LANE VỚI TRACE"
         render()
