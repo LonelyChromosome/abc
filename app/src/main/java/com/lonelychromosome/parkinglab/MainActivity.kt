@@ -303,7 +303,7 @@ class MainActivity : Activity() {
                 mainButton.text = "LƯU ĐIỂM ĐỖ THỦ CÔNG"
             }
             TripStore.SAVED -> {
-                stageLabel.text = "TRACKED · ĐÃ LƯU VỊ TRÍ XE"
+                stageLabel.text = if(NavState.endedAt(this)>TripStore.parkTime(this)) "END · ĐÃ KẾT THÚC DẪN ĐƯỜNG" else "TRACKED · ĐÃ LƯU VỊ TRÍ XE"
                 explanation.text = (if (TripStore.autoSaved(this)) "Tự xác minh đi bộ 10s. " else "Lưu thủ công. ") +
                     "Lưu lúc ${TripStore.savedDate(this)}"
                 mainButton.text = "BẮT ĐẦU HÀNH TRÌNH MỚI"
