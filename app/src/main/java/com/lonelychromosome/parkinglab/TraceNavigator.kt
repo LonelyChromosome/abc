@@ -70,7 +70,9 @@ object TraceNavigator {
         var entry = -1
         for (i in cutoff downTo 0) {
             val gap = network.nearest(trip.trace[i])?.distance ?: continue
-            if (gap <= 12.0 && (trip.trace[i].distance(bike) >= 8.0 || i == cutoff)) {
+            // Deliberately enter the parking approach at least 18 m before the bike.
+            // Matching the lane at the bike itself would skip the recorded final turn.
+            if (gap <= 12.0 && trip.trace[i].distance(bike) >= 18.0) {
                 entry = i
                 break
             }
