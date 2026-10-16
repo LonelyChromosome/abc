@@ -89,26 +89,14 @@ class FindBikeActivity : Activity() {
         stop=btn("END · KẾT THÚC DẪN ĐƯỜNG"){finishNav()}
         bottom.addView(start,LinearLayout.LayoutParams(-1,dp(52)))
         bottom.addView(stop,LinearLayout.LayoutParams(-1,dp(49)))
-        val calibrateRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        calibrateRow.addView(btn("CHẤM CỔNG 1"){selectGate(0)},LinearLayout.LayoutParams(0,dp(46),1f))
-        calibrateRow.addView(btn("CHẤM CỔNG 2"){selectGate(1)},LinearLayout.LayoutParams(0,dp(46),1f))
-        bottom.addView(calibrateRow)
-        calibrate=txt("Hiệu chuẩn bằng 2 mốc thực, không ước đoán pixel/m.",11f,
+        calibrate=txt("Scale Google Maps z18: 0,385223 m/pixel · sai lệch tham chiếu ~3%",11f,
             Color.rgb(181,194,208)).apply{setPadding(0,dp(7),0,dp(7))}
         bottom.addView(calibrate)
         bottom.addView(btn("MỞ GOOGLE MAPS DỰ PHÒNG (GPS THẬT)"){openGoogleMaps()},
             LinearLayout.LayoutParams(-1,dp(47)))
         root.addView(bottom)
         setContentView(root)
-        map.onGate={gate->
-            Toast.makeText(this,"Đã chấm mốc cổng ${gate+1} trên ảnh. Cần xác minh tỷ lệ thực địa.",Toast.LENGTH_LONG).show()
-            render()
-        }
         render()
-    }
-    private fun selectGate(i:Int) {
-        map.selectedGate=i
-        Toast.makeText(this,"Chạm đúng tâm cổng ${i+1} trên ảnh map để định chuẩn.",Toast.LENGTH_LONG).show()
     }
     private fun navigate(){
         if(!TripStore.hasSaved(this)) {
@@ -162,16 +150,24 @@ class FindBikeActivity : Activity() {
         if(!::info.isInitialized)return
         val lat=TripStore.parkLat(this)
         val lon=TripStore.parkLon(this)
-        val current=NavState.location(this)
+        val navigating=NavState.active(this)
+        val current=if(navigating) NavState.location(this) else if(TripStore.running(this) &&
+            TripStore.latitude(this)!=null && TripStore.longitude(this)!=null &&
+            (System.currentTimeMillis()-TripStore.lastFix(this))<15_000L)
+            GeoPoint(TripStore.latitude(this)!!,TripStore.longitude(this)!!) else null
         val bike=if(lat!=null&&lon!=null) GeoPoint(lat,lon) else null
-        map.setGps(current,bike,NavState.active(this))
+        val recorded=TripStore.traceForMap(this)
+        map.setTrace(recorded)
+        map.setGps(current,if(navigating)bike else null,navigating)
         start.isEnabled=bike!=null
         stop.visibility=if(NavState.active(this)) View.VISIBLE else View.GONE
-        calibrate.text=if(map.isCalibrated())
-            "Hiệu chuẩn 2 cổng: ${map.scaleLabel()} · cần kiểm chứng sai số ngoài thực địa"
-        else "Chưa định chuẩn 2 cổng · không vẽ tuyến theo tỷ lệ giả"
+        calibrate.text="TRACE TÍM: GPS ghi lại (${recorded.size} điểm) · XANH: tuyến về xe\n" +
+            map.scaleLabel()
         if(bike==null){
-            info.text="CHƯA CÓ ĐIỂM TRACKED THỰC · cần ghi xe + đi bộ 10s trước"
+            info.text=if(TripStore.running(this))
+                "TRACKING THẬT · ${recorded.size} điểm trên map · GPS ±${TripStore.accuracy(this).toInt()}m" +
+                "\nChờ dừng xe + bước chân thật 10 giây"
+            else "CHƯA TRACKED · Mở map khi tracking để theo dõi trace GPS thật"
             return
         }
         val parked=String.format(Locale.US,"%.6f, %.6f",lat,lon)
@@ -182,7 +178,8 @@ class FindBikeActivity : Activity() {
         }else {
             val gap=current.distance(bike)
             val route=map.remainingPathMetres()
-            info.text="TRACKED: $parked\nGPS BẠN ±${NavState.accuracy(this).toInt()} m · " +
+            val accuracy=if(navigating)NavState.accuracy(this) else TripStore.accuracy(this)
+            info.text="TRACKED: $parked\nGPS BẠN ±${accuracy.toInt()} m · " +
                 "Cách điểm xe ~${gap.toInt()} m (thẳng)" +
                 if(route!=null) " · Tuyến map ~${route.toInt()} m" else " · Tuyến map chưa đủ dữ liệu"
         }
