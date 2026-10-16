@@ -111,7 +111,7 @@ class LaneNetwork private constructor(
             val connections = mutableListOf<MutableMap<Int, Double>>()
             // Densify the user-drawn lanes; merge close junctions, not entire parking areas.
             fun node(x: Double, y: Double): Int {
-                val found = nodes.indexOfFirst { hypot(it.x - x, it.y - y) <= 6.0 }
+                val found = nodes.indexOfFirst { hypot(it.x - x, it.y - y) <= 8.0 }
                 if (found >= 0) return found
                 nodes.add(PixelNode(x, y, project(x, y)))
                 connections.add(mutableMapOf())
