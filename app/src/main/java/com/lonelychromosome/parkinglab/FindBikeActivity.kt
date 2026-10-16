@@ -1,279 +1,216 @@
 package com.lonelychromosome.parkinglab
 
 import android.app.Activity
-import android.content.Context
-import android.content.pm.PackageManager
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
+import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.MapView
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.Polyline
-import com.google.android.gms.maps.model.PolylineOptions
-import kotlin.math.*
+import android.view.*
+import android.widget.*
+import android.graphics.drawable.GradientDrawable
+import com.google.android.gms.maps.*
+import com.google.android.gms.maps.model.*
+import kotlin.math.roundToInt
 
-/** Native Find Bike. Google supplies only the basemap, every route is computed locally. */
+/** Isolated simulated test: Google supplies ONLY background pixels, BPA computes every route. */
 class FindBikeActivity : Activity(), OnMapReadyCallback {
-    private lateinit var network: LaneNetwork
-    private lateinit var mapContainer: FrameLayout
-    private lateinit var info: TextView
-    private lateinit var action: Button
-    private lateinit var dataButton: Button
-    private var googleMapView: MapView? = null
-    private var googleMap: GoogleMap? = null
-    private var preview: LanePreviewView? = null
-    private var trip: TraceNavigator.BikeTrip? = null
-    private var position: GeoPoint? = null
-    private var plan: TraceNavigator.Plan? = null
-    private var navigating = true
-    private var simulatedOriginIndex = 0
-    private var fitted = false
-    private val dynamicOverlays = mutableListOf<Polyline>()
-
-    private fun dp(v: Int) = (resources.displayMetrics.density * v).toInt()
-    private fun latLng(p: GeoPoint) = LatLng(p.lat, p.lon)
-    private fun control(label: String, color: Int, click: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            isAllCaps = false
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            setBackgroundColor(color)
-            setOnClickListener { click() }
+    private lateinit var network:LaneNetwork
+    private lateinit var info:TextView
+    private lateinit var caption:TextView
+    private lateinit var mapFrame:FrameLayout
+    private var mapView:MapView?=null
+    private var map:GoogleMap?=null
+    private var preview:InteractiveLaneView?=null
+    private var trip:TraceNavigator.BikeTrip?=null
+    private var start:GeoPoint?=null
+    private var path:TraceNavigator.Plan?=null
+    private var index=0
+    private val bg=Color.rgb(11,21,35)
+    private val accent=Color.rgb(77,239,191)
+    private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
+    private fun ll(p:GeoPoint)=LatLng(p.lat,p.lon)
+    private fun style(color:Int,radius:Int=15)=GradientDrawable().apply{
+        setColor(color);cornerRadius=dp(radius).toFloat()
+    }
+    private fun text(s:String,size:Float,color:Int=Color.WHITE)=TextView(this).apply{
+        text=s;textSize=size;setTextColor(color)
+    }
+    private fun button(s:String,fill:Int,click:()->Unit)=Button(this).apply{
+        text=s;textSize=12.5f;isAllCaps=false;setTextColor(Color.WHITE)
+        background=style(fill,12);setOnClickListener{click()}
+    }
+    override fun onCreate(saved:Bundle?){
+        super.onCreate(saved)
+        window.statusBarColor=bg
+        window.navigationBarColor=bg
+        window.decorView.systemUiVisibility=0
+        network=LaneNetwork.load(this)
+        trip=TraceNavigator.referenceTrip(this)
+        start=network.simulatedStarts.firstOrNull()?.second
+        val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(bg)}
+        // Android 15 edge-to-edge: keep title out of the status bar on every device.
+        root.setOnApplyWindowInsetsListener{v,insets->
+            if(Build.VERSION.SDK_INT>=30){
+                val b=insets.getInsets(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                v.setPadding(0,b.top,0,b.bottom)
+            }else{
+                @Suppress("DEPRECATION")
+                v.setPadding(0,insets.systemWindowInsetTop,0,insets.systemWindowInsetBottom)
+            }
+            insets
         }
-
-    override fun onCreate(state: Bundle?) {
-        super.onCreate(state)
-        network = LaneNetwork.load(this)
-        // Preview is deliberately self-contained: genuine recorded GPX and a simulated origin.
-        trip = TraceNavigator.referenceTrip(this)
-        position = network.simulatedStarts.firstOrNull()?.second
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(11, 18, 30))
+        val top=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(16),dp(12),dp(16),dp(10))
         }
-        val header = TextView(this).apply {
-            text = "FIND BIKE  /  TEST VỊ TRÍ GIẢ"
-            textSize = 17f
-            setTextColor(Color.rgb(113, 246, 208))
-            setPadding(dp(15), dp(14), dp(12), dp(12))
+        top.addView(text("FIND BIKE",19f,accent))
+        top.addView(text("MÔ PHỎNG TUYẾN ĐẾN XE · GPS KHÔNG BẬT",11f,Color.rgb(162,187,205)))
+        root.addView(top)
+        mapFrame=FrameLayout(this)
+        root.addView(mapFrame,LinearLayout.LayoutParams(-1,0,1f))
+        val controlBar=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(14),dp(13),dp(14),dp(13))
+            background=style(Color.rgb(18,32,49),16)
         }
-        root.addView(header)
-        mapContainer = FrameLayout(this)
-        root.addView(mapContainer, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        info = TextView(this).apply {
-            textSize = 13f
-            setTextColor(Color.rgb(236, 241, 250))
-            setPadding(dp(16), dp(12), dp(16), dp(10))
+        info=text("",13f).apply{setLineSpacing(dp(3).toFloat(),1f)}
+        controlBar.addView(info)
+        val legend=text("━  LANE       ━  TRÊN LANE       - -  NGOÀI LANE / TRACE",10.5f,
+            Color.rgb(162,187,205)).apply{setPadding(0,dp(9),0,dp(9))}
+        controlBar.addView(legend)
+        val buttons=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+        buttons.addView(button("TÌM LẠI TUYẾN",Color.rgb(0,125,109)){refresh()},LinearLayout.LayoutParams(0,dp(49),1f))
+        val gap=View(this)
+        buttons.addView(gap,LinearLayout.LayoutParams(dp(9),1))
+        buttons.addView(button("ĐỔI ĐIỂM ĐI",Color.rgb(44,69,91)){
+            if(network.simulatedStarts.isNotEmpty()){
+                index=(index+1)%network.simulatedStarts.size
+                start=network.simulatedStarts[index].second
+                refresh();fit()
+            }
+        },LinearLayout.LayoutParams(0,dp(49),1f))
+        controlBar.addView(buttons)
+        root.addView(controlBar)
+        setContentView(root)
+        val key=try{packageManager.getApplicationInfo(packageName,
+            android.content.pm.PackageManager.GET_META_DATA).metaData
+            ?.getString("com.google.android.geo.API_KEY")}catch(_:Exception){null}
+        if(key.isNullOrBlank()||key=="NO_KEY"){
+            preview=InteractiveLaneView(this,network).apply{
+                onSelectOrigin={newPos->
+                    start=newPos
+                    refresh()
+                }
+            }
+            mapFrame.addView(preview,FrameLayout.LayoutParams(-1,-1))
+        }else{
+            mapView=MapView(this)
+            mapFrame.addView(mapView,FrameLayout.LayoutParams(-1,-1))
+            mapView?.onCreate(saved)
+            mapView?.getMapAsync(this)
         }
-        root.addView(info)
-        val controls = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(7), 0, dp(7), dp(12))
+        val floating=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL;setPadding(dp(4),dp(4),dp(4),dp(4))
+            background=style(Color.rgb(24,42,59),12)
         }
-        action = control("TÌM ĐƯỜNG ĐẾN XE", Color.rgb(10, 110, 96)) {
-            navigating = true
+        listOf("+" to 1,"−" to -1,"◎" to 0).forEach{(label,dir)->
+            floating.addView(button(label,Color.rgb(35,60,79)){
+                when(dir){
+                    1 -> {map?.animateCamera(CameraUpdateFactory.zoomIn());preview?.zoom(1.6)}
+                    -1 -> {map?.animateCamera(CameraUpdateFactory.zoomOut());preview?.zoom(1.0/1.6)}
+                    else -> fit()
+                }
+            },LinearLayout.LayoutParams(dp(49),dp(49)))
+        }
+        mapFrame.addView(floating,FrameLayout.LayoutParams(-2,-2,Gravity.END or Gravity.CENTER_VERTICAL)
+            .apply{rightMargin=dp(12)})
+        caption=text(if(mapView==null)"CHƯA CÓ GOOGLE MAPS KEY · SƠ ĐỒ GPS"
+            else "GOOGLE MAPS · NỀN HIỂN THỊ",10f,Color.WHITE).apply{
+            setPadding(dp(10),dp(7),dp(10),dp(7))
+            background=style(Color.rgb(28,49,68),9)
+        }
+        mapFrame.addView(caption,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or Gravity.START)
+            .apply{leftMargin=dp(12);topMargin=dp(12)})
+        refresh()
+    }
+    override fun onMapReady(m:GoogleMap){
+        map=m
+        m.mapType=GoogleMap.MAP_TYPE_NORMAL
+        m.uiSettings.isZoomGesturesEnabled=true
+        m.uiSettings.isScrollGesturesEnabled=true
+        m.uiSettings.isCompassEnabled=true
+        m.uiSettings.isZoomControlsEnabled=false
+        m.setOnMapClickListener{location->
+            start=GeoPoint(location.latitude,location.longitude)
             refresh()
         }
-        dataButton = control("ĐỔI ĐIỂM BẮT ĐẦU", Color.rgb(53, 69, 92)) {
-            if (network.simulatedStarts.isNotEmpty()) {
-                simulatedOriginIndex = (simulatedOriginIndex + 1) % network.simulatedStarts.size
-                position = network.simulatedStarts[simulatedOriginIndex].second
-                fitted = false
-                refresh()
-                fitCampus()
+        render()
+        mapFrame.post{fit()}
+    }
+    private fun fit(){
+        val m=map
+        if(m!=null){
+            val builder=LatLngBounds.Builder()
+            network.lanes.flatten().forEach{builder.include(ll(it))}
+            start?.let{builder.include(ll(it))}
+            trip?.let{builder.include(ll(it.bike))}
+            if(mapFrame.width>0&&mapFrame.height>0){
+                m.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(),dp(48)))
+            }else{
+                m.animateCamera(CameraUpdateFactory.newLatLngZoom(ll(trip?.bike
+                    ?:GeoPoint(20.959505,105.747637)),17f))
             }
         }
-        controls.addView(action, LinearLayout.LayoutParams(0, dp(52), 1.25f))
-        controls.addView(dataButton, LinearLayout.LayoutParams(0, dp(52), 1f))
-        root.addView(controls)
-        setContentView(root)
-
-        val key = try {
-            packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
-                .metaData?.getString("com.google.android.geo.API_KEY")
-        } catch (_: Exception) { null }
-        if (key.isNullOrBlank() || key == "NO_KEY") {
-            // An honest geometry-only diagnostic, not an invented Google basemap.
-            preview = LanePreviewView(this, network)
-            mapContainer.addView(preview, FrameLayout.LayoutParams(-1, -1))
-        } else {
-            googleMapView = MapView(this)
-            mapContainer.addView(googleMapView, FrameLayout.LayoutParams(-1, -1))
-            googleMapView?.onCreate(state)
-            googleMapView?.getMapAsync(this)
-        }
-        refresh()
+        preview?.fit()
     }
-
-    override fun onMapReady(map: GoogleMap) {
-        googleMap = map
-        map.uiSettings.isZoomControlsEnabled = true
-        map.uiSettings.isCompassEnabled = true
-        map.uiSettings.isMyLocationButtonEnabled = false
-        map.mapType = GoogleMap.MAP_TYPE_NORMAL
-        renderOverlays()
-        fitCampus()
-        refresh()
+    private fun poly(points:List<GeoPoint>,color:Int,width:Float,dash:Boolean=false,z:Float=2f){
+        if(points.size<2)return
+        val o=PolylineOptions().addAll(points.map(::ll)).color(color).width(dp(width).toFloat()).zIndex(z)
+        if(dash)o.pattern(listOf(Dash(dp(12).toFloat()),Gap(dp(9).toFloat())))
+        map?.addPolyline(o)
     }
-
-    private fun fitCampus() {
-        val map = googleMap ?: return
-        if (fitted) return
-        val builder = LatLngBounds.Builder()
-        network.lanes.forEach { lane -> lane.forEach { builder.include(latLng(it)) } }
-        val currentTrip = trip
-        if (currentTrip != null) builder.include(latLng(currentTrip.bike))
-        try {
-            position?.let { builder.include(latLng(it)) }
-            map.moveCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), dp(32)))
-            fitted = true
-        } catch (_: Exception) {
-            // Map dimensions may not be ready on the first callback.
-            val car = currentTrip?.bike ?: GeoPoint(20.9600, 105.7480)
-            map.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng(car), 16.8f))
+    private fun approach(c:List<GeoPoint>){
+        c.zipWithNext{a,b->
+            // A trace segment is solid only if both ends are on an existing digitized lane.
+            val onLane=(network.nearest(a)?.distance ?: 999.0)<6.0 &&
+                (network.nearest(b)?.distance ?: 999.0)<6.0
+            poly(listOf(a,b),Color.rgb(255,163,65),4.2f,!onLane,6f)
         }
     }
-
-    private fun renderOverlays() {
-        val map = googleMap
-        if (map != null) {
-            map.clear()
-            dynamicOverlays.clear()
-            // User-authored lane lines, rendered as geodetic polylines (not Google routing).
-            network.lanes.forEach { road ->
-                if (road.size >= 2) {
-                    map.addPolyline(PolylineOptions().addAll(road.map(::latLng))
-                        .color(Color.rgb(0, 155, 185)).width(4f).zIndex(1f))
-                }
+    private fun render(){
+        val m=map
+        if(m!=null){
+            m.clear()
+            network.lanes.forEach{poly(it,Color.rgb(39,151,181),2.6f,false,1f)}
+            network.estimatedLinks.forEach{poly(listOf(it.first,it.second),
+                Color.rgb(236,191,104),2.8f,true,1f)}
+            trip?.trace?.let{poly(it,Color.rgb(132,141,195),2f,true,2f)}
+            path?.let{route->
+                if(route.walkToLane.zipWithNext().any{(a,b)->a.distance(b)>3.0})
+                    poly(route.walkToLane,Color.rgb(244,192,101),3f,true,4f)
+                poly(route.lanePart,Color.rgb(31,221,148),5f,false,5f)
+                approach(route.approachPart)
             }
-            val currentTrip = trip
-            if (currentTrip != null) {
-                map.addMarker(MarkerOptions().position(latLng(currentTrip.bike))
-                    .title(if (currentTrip.demo) "Xe mẫu • GPX kiểm thử" else "Vị trí xe đã lưu")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)))
-                if (currentTrip.trace.size > 1) {
-                    map.addPolyline(PolylineOptions().addAll(currentTrip.trace.map(::latLng))
-                        .color(Color.rgb(66, 110, 250)).width(4f).zIndex(2f))
-                }
-            }
-            position?.let {
-                map.addMarker(MarkerOptions().position(latLng(it)).title("Điểm xuất phát GIẢ LẬP")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))
-            }
-            plan?.let { p ->
-                if (p.walkToLane.size > 1) map.addPolyline(PolylineOptions().addAll(p.walkToLane.map(::latLng)).color(Color.CYAN).width(5f))
-                if (p.lanePart.size > 1) dynamicOverlays.add(map.addPolyline(
-                    PolylineOptions().addAll(p.lanePart.map(::latLng))
-                        .color(Color.rgb(23, 183, 107)).width(9f).zIndex(5f)))
-                if (p.approachPart.size > 1) dynamicOverlays.add(map.addPolyline(
-                    PolylineOptions().addAll(p.approachPart.map(::latLng))
-                        .color(Color.rgb(255, 147, 24)).width(8f).zIndex(6f)))
-            }
+            start?.let{m.addMarker(MarkerOptions().position(ll(it)).title("Điểm xuất phát giả lập")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))}
+            trip?.let{m.addMarker(MarkerOptions().position(ll(it.bike)).title("XE ĐỖ · TỌA ĐỘ ĐÃ XÁC NHẬN")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)))}
         }
-        preview?.update(trip, position, plan)
+        preview?.show(trip,start,path)
     }
-
-    private fun refresh() {
-        val currentTrip = trip
-        val start = position ?: if (currentTrip?.demo == true) currentTrip.trace.firstOrNull() else null
-        plan = if (navigating && start != null && currentTrip != null)
-            TraceNavigator.plan(network, start, currentTrip) else null
-        info.text = buildString {
-            append("MẠNG LANE NHÁP · ")
-            append(network.lanes.size).append(" đoạn · ")
-            append(network.vertexCount).append(" nút · ")
-            append(network.componentCount).append(" nhóm kết nối")
-            append("\nTỷ lệ từ GPX: hiệu chỉnh thử, CHƯA xác minh địa lý toàn trường.")
-            if (googleMapView == null) append("\nChưa có Google Maps API key: đang xem sơ đồ lane không nền.")
-            if (currentTrip == null) append("\nChưa lưu xe. Có thể bấm THỬ GPX 29 ĐIỂM.")
-            else {
-                append("\nTEST KHÔNG GPS: điểm xuất phát giả lập, xe đã xác nhận, GPX 29 điểm.")
-                append("\nĐiểm đi: ").append(network.simulatedStarts.getOrNull(simulatedOriginIndex)?.first ?: "Chưa thiết lập")
-                if (start == null) append("\nChưa có điểm xuất phát mô phỏng.")
-                if (navigating) {
-                    val route = plan
-                    if (route == null) append("\nChưa ghép được lane và trace: không vẽ đường xuyên công trình.")
-                    else append("\nDự kiến ").append(route.metres.roundToInt())
-                        .append(" m · khớp lane tại điểm GPX #").append(route.traceEntryIndex + 1)
-                        .append(" · cách lane ").append(route.laneMatchGap.roundToInt()).append(" m.")
-                }
-            }
-        }
-        renderOverlays()
+    private fun refresh(){
+        path=if(start!=null&&trip!=null)TraceNavigator.plan(network,start!!,trip!!) else null
+        val originName=network.simulatedStarts.find{it.second==start}?.first ?: "Đã chọn trên bản đồ"
+        info.text=if(path!=null)
+            "TỪ: "+originName+"      →      XE: KTX B / CỔNG PHỤ"+
+            "\nTUYẾN: "+path!!.metres.roundToInt()+" m  ·  Nối trace tại điểm #"+(path!!.traceEntryIndex+1)
+        else "TỪ: "+originName+"\nCHƯA TÌM ĐƯỢC LỐI KHỚP LANE VỚI TRACE"
+        render()
     }
-
-    override fun onStart() { super.onStart(); googleMapView?.onStart() }
-    override fun onResume() {
-        super.onResume()
-        googleMapView?.onResume()
-    }
-    override fun onPause() {
-        googleMapView?.onPause()
-        super.onPause()
-    }
-    override fun onStop() { googleMapView?.onStop(); super.onStop() }
-    override fun onDestroy() { googleMapView?.onDestroy(); super.onDestroy() }
-    override fun onLowMemory() { super.onLowMemory(); googleMapView?.onLowMemory() }
-    override fun onSaveInstanceState(out: Bundle) { googleMapView?.onSaveInstanceState(out); super.onSaveInstanceState(out) }
-}
-
-/** Preview fallback: geodetically scaled lane geometry only. Never pretends to be Google Maps. */
-private class LanePreviewView(context: Context, private val network: LaneNetwork) : View(context) {
-    private var trip: TraceNavigator.BikeTrip? = null
-    private var user: GeoPoint? = null
-    private var route: TraceNavigator.Plan? = null
-    private val brush = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-    fun update(t: TraceNavigator.BikeTrip?, u: GeoPoint?, p: TraceNavigator.Plan?) {
-        trip = t; user = u; route = p; invalidate()
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        canvas.drawColor(Color.rgb(13, 25, 39))
-        val points = network.lanes.flatten()
-        if (points.isEmpty()) return
-        val minLat = points.minOf { it.lat }; val maxLat = points.maxOf { it.lat }
-        val minLon = points.minOf { it.lon }; val maxLon = points.maxOf { it.lon }
-        val reference = (minLat + maxLat) / 2
-        val correctedWidth = (maxLon - minLon) * cos(Math.toRadians(reference))
-        val spanY = (maxLat - minLat).coerceAtLeast(0.00001)
-        val margin = 24f * resources.displayMetrics.density
-        val scale = min((width - 2 * margin) / correctedWidth.toFloat().coerceAtLeast(0.00001f),
-            (height - 2 * margin) / spanY.toFloat())
-        val offsetX = (width - correctedWidth * scale) / 2
-        val offsetY = (height - spanY * scale) / 2
-        fun x(p: GeoPoint) = (offsetX + (p.lon - minLon) * cos(Math.toRadians(reference)) * scale).toFloat()
-        fun y(p: GeoPoint) = (offsetY + (maxLat - p.lat) * scale).toFloat()
-        fun drawLine(points: List<GeoPoint>, color: Int, stroke: Float) {
-            brush.color = color; brush.style = Paint.Style.STROKE; brush.strokeWidth = stroke
-            points.zipWithNext { a,b -> canvas.drawLine(x(a), y(a), x(b), y(b), brush) }
-        }
-        network.lanes.forEach { drawLine(it, Color.rgb(72, 138, 163), 3f) }
-        trip?.trace?.let { drawLine(it, Color.rgb(58, 117, 255), 3f) }
-        route?.walkToLane?.let { drawLine(it, Color.CYAN, 4f) }
-        route?.lanePart?.let { drawLine(it, Color.rgb(12, 222, 148), 6f) }
-        route?.approachPart?.let { drawLine(it, Color.rgb(254, 172, 66), 6f) }
-        fun dot(p: GeoPoint?, color: Int, radius: Float) {
-            if (p == null) return
-            brush.color = color; brush.style = Paint.Style.FILL
-            canvas.drawCircle(x(p), y(p), radius, brush)
-        }
-        dot(trip?.bike, Color.RED, 8f)
-        dot(user, Color.CYAN, 7f)
-    }
+    override fun onStart(){super.onStart();mapView?.onStart()}
+    override fun onResume(){super.onResume();mapView?.onResume()}
+    override fun onPause(){mapView?.onPause();super.onPause()}
+    override fun onStop(){mapView?.onStop();super.onStop()}
+    override fun onDestroy(){mapView?.onDestroy();super.onDestroy()}
+    override fun onLowMemory(){super.onLowMemory();mapView?.onLowMemory()}
+    override fun onSaveInstanceState(out:Bundle){mapView?.onSaveInstanceState(out);super.onSaveInstanceState(out)}
 }
