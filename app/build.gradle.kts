@@ -9,8 +9,8 @@ android {
     applicationId = "com.lonelychromosome.parkinglab.findbiketest"
     minSdk = 26
     targetSdk = 35
-    versionCode = 7
-    versionName = "0.6.1-findbike-test-standalone"
+    versionCode = 8
+    versionName = "0.7.0-interactive-map-preview"
   }
   defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = providers.environmentVariable("BPA_MAPS_API_KEY").orElse(providers.gradleProperty("BPA_MAPS_API_KEY")).orElse("NO_KEY").get()
   compileOptions {
