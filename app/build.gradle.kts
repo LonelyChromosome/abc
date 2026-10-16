@@ -9,8 +9,8 @@ android {
     applicationId = "com.lonelychromosome.parkinglab.fieldtest"
     minSdk = 26
     targetSdk = 35
-    versionCode = 9
-    versionName = "1.0.0-real-gps-fieldtest"
+    versionCode = 10
+    versionName = "1.2.0-real-gps-trace-scale"
   }
   defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = providers.environmentVariable("BPA_MAPS_API_KEY").orElse(providers.gradleProperty("BPA_MAPS_API_KEY")).orElse("NO_KEY").get()
   compileOptions {
