@@ -86,9 +86,11 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
             TripStore.cancel(this)
             shutdown()
             TripStore.alert(this, "Không khởi động GPS: " + ex.javaClass.simpleName)
+            FieldStatus.error(this,"Không khởi động GPS: " + ex.javaClass.simpleName)
             return START_NOT_STICKY
         }
         if (intent?.action == AUTO_START) ClassSchedule.markTriggered(this)
+        FieldStatus.tracking(this)
         handler.removeCallbacks(refresh)
         handler.post(refresh)
         return START_STICKY
@@ -103,6 +105,7 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
         if (event.sensor.type != Sensor.TYPE_STEP_DETECTOR) return
         if (TripStore.onStep(this, event.timestamp / 1_000_000L)) {
             CampusFence.record(this, "Đã nhận đi bộ 10s · lưu điểm đỗ nội suy ngược")
+            FieldStatus.tracked(this,TripStore.accuracy(this))
             shutdown()
         }
     }
