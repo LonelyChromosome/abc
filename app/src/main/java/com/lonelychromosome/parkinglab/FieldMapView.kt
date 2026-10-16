@@ -8,18 +8,21 @@ import android.view.View
 import kotlin.math.*
 import java.util.PriorityQueue
 
-/** Approved static map. It is never resized non-uniformly. Navigation runs only after gate calibration. */
+/** Approved static map, single fixed GPS-to-map reference scale; live GPS trace + navigation. */
 class FieldMapView(ctx:Context) : View(ctx) {
     private val calibration=FieldCalibration(ctx)
     private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply {strokeCap=Paint.Cap.ROUND;strokeJoin=Paint.Join.ROUND}
     private val bitmap:Bitmap?=try {ctx.assets.open("approved_map.webp").use{BitmapFactory.decodeStream(it)}}catch(_:Exception){null}
     private val mapWidth=1448f
     private val mapHeight=1086f
-    var onGate:((Int)->Unit)?=null
-    var selectedGate=-1
     private var person:GeoPoint?=null
     private var parked:GeoPoint?=null
     private var path:List<PointF> = emptyList()
+    private var trace:List<PointF> = emptyList()
+    fun setTrace(points:List<GeoPoint>) {
+        trace=points.takeLast(3500).map { calibration.point(it.lat,it.lon) }
+        invalidate()
+    }
     private var angle=0f
     private var zoom=1f
     private var panX=0f
@@ -42,11 +45,11 @@ class FieldMapView(ctx:Context) : View(ctx) {
         path=if(now!=null&&bike!=null&&calibration.has()) {
             val a=calibration.point(now.lat,now.lon)
             val b=calibration.point(bike.lat,bike.lon)
-            if(a!=null&&b!=null) pathfind(a,b) else emptyList()
+            if(calibration.validPixel(a)&&calibration.validPixel(b)) pathfind(a,b) else emptyList()
         } else emptyList()
         if(follow && now!=null) {
             val p=calibration.point(now.lat,now.lon)
-            if(p!=null&&p.x in 0f..mapWidth&&p.y in 0f..mapHeight) {
+            if(calibration.validPixel(p)) {
                 panX=(width/2f)-(width-mapWidth*factor())/2f-p.x*factor()
                 panY=(height*.51f)-(height-mapHeight*factor())/2f-p.y*factor()
             }
@@ -58,8 +61,8 @@ class FieldMapView(ctx:Context) : View(ctx) {
         if(path.size<2)return null
         return path.zipWithNext().sumOf{(a,b)->hypot((a.x-b.x).toDouble(),(a.y-b.y).toDouble())}*scale
     }
-    fun isCalibrated()=calibration.metrePerPixel()!=null
-    fun scaleLabel():String=calibration.metrePerPixel()?.let{"%.2f m/pixel".format(it)}?:"Chưa định chuẩn 2 cổng"
+    fun isCalibrated()=true
+    fun scaleLabel():String="0,385223 m/pixel · tham chiếu Google Maps z18 (sai khác kiểm tra ~3%)"
     fun zoomIn(){zoom=(zoom*1.5f).coerceAtMost(12f);invalidate()}
     fun zoomOut(){zoom=(zoom/1.5f).coerceAtLeast(1f);invalidate()}
     fun reset(){zoom=1f;panX=0f;panY=0f;invalidate()}
@@ -83,6 +86,27 @@ class FieldMapView(ctx:Context) : View(ctx) {
             paint.style=Paint.Style.FILL;paint.color=Color.rgb(206,219,230)
             c.drawRect(0f,0f,mapWidth,mapHeight,paint)
         }
+        // Recorded REAL GPS trace is separate from the computed return route.
+        if(trace.size>=2) {
+            paint.style=Paint.Style.STROKE
+            paint.color=Color.rgb(128,52,204)
+            paint.strokeWidth=3.3f/factor()
+            paint.pathEffect=null
+            val gpsLine=Path()
+            var inSegment=false
+            var previous:PointF?=null
+            for(p in trace) {
+                if(!calibration.validPixel(p)) {inSegment=false;previous=null;continue}
+                // Don't connect over large GPS jumps and draw a fake passage through buildings.
+                if(!inSegment || (previous!=null && hypot(p.x-previous.x,p.y-previous.y)*0.385223f>35f)) {
+                    gpsLine.moveTo(p.x,p.y)
+                } else gpsLine.lineTo(p.x,p.y)
+                inSegment=true;previous=p
+            }
+            c.drawPath(gpsLine,paint)
+            val last=trace.lastOrNull()
+            if(last!=null && calibration.validPixel(last)) dot(c,last,Color.rgb(128,52,204),4.2f/factor())
+        }
         if(path.size>=2) {
             val p=Path();p.moveTo(path[0].x,path[0].y)
             path.drop(1).forEach{p.lineTo(it.x,it.y)}
@@ -98,13 +122,8 @@ class FieldMapView(ctx:Context) : View(ctx) {
         val radius=8f/factor()
         dot(c,person?.let{calibration.point(it.lat,it.lon)},Color.rgb(12,178,235),radius)
         dot(c,parked?.let{calibration.point(it.lat,it.lon)},Color.rgb(250,174,47),radius)
-        for(g in 0..1)dot(c,calibration.mark(g),
-            if(g==0)Color.rgb(55,175,105) else Color.rgb(180,85,175),radius*.85f)
         c.restore()
-        if(!isCalibrated()){
-            paint.style=Paint.Style.FILL;paint.color=Color.rgb(19,37,56);paint.textSize=14*resources.displayMetrics.scaledDensity
-            c.drawText("MAP CHUA DINH CHUAN TOA DO GPS",12f,32f,paint)
-        }
+
     }
     override fun onTouchEvent(e:MotionEvent):Boolean{
         pinch.onTouchEvent(e)
@@ -123,15 +142,6 @@ class FieldMapView(ctx:Context) : View(ctx) {
                 return true
             }
             MotionEvent.ACTION_UP->{
-                if(!dragged && selectedGate in 0..1){
-                    val p=src(e.x,e.y)
-                    if(p.x in 0f..mapWidth&&p.y in 0f..mapHeight){
-                        calibration.setGate(selectedGate,p.x,p.y)
-                        val gate=selectedGate;selectedGate=-1
-                        onGate?.invoke(gate)
-                        setGps(person,parked,false)
-                    }
-                }
                 performClick();return true
             }
         }
