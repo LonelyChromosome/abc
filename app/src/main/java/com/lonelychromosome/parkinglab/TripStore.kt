@@ -39,6 +39,7 @@ object TripStore {
         val start = p(c).getLong("walkStartMono", 0L)
         return if (start == 0L) 0L else ((SystemClock.elapsedRealtime() - start) / 1000L).coerceAtLeast(0L)
     }
+    fun parkTime(c:Context)=p(c).getLong("parkTime",0L)
     fun savedDate(c: Context): String {
         val t = p(c).getLong("parkTime", 0L)
         return if (t == 0L) "" else SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date(t))
