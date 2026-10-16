@@ -2,6 +2,8 @@ name: Android GPS APK
 on:
   push:
     branches: [main, feature/find-bike-lane-map]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 jobs:
   build:
