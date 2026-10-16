@@ -227,6 +227,7 @@ object TripStore {
             .putString("savedRoute", dest.absolutePath)
             .putBoolean("autoSaved", automatic).remove("message").apply()
         active(c).delete()
+        FieldStatus.tracked(c,accuracy(c))
         return true
     }
 
