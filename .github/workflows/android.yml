@@ -1,6 +1,8 @@
 name: Android GPS APK
 on:
   push:
+    branches: [main, feature/find-bike-lane-map]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 jobs:
@@ -25,9 +27,11 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Build debug APK
+        env:
+          BPA_MAPS_API_KEY: ${{ secrets.BPA_MAPS_API_KEY }}
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: BPA-Parking-Lab-CustomSchedule-v0.5
+          name: BPA-Parking-Lab-FindBike-v0.6-preview
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
