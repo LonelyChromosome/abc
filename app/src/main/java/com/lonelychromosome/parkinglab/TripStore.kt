@@ -232,6 +232,37 @@ object TripStore {
         return true
     }
 
+    /**
+     * Real GPS trip polyline, recorded by TrackingService. There are no test points.
+     * Return the active trace while TRACKING/STOP and the archived trace after TRACKED.
+     */
+    fun traceForMap(c:Context):List<GeoPoint> {
+        val f=if(running(c)) active(c) else {
+            val stored=savedRoute(c) ?: return emptyList()
+            try {
+                val f=File(stored).canonicalFile
+                val allowed=folder(c).canonicalPath+File.separator
+                if(!f.path.startsWith(allowed))return emptyList()
+                f
+            }catch(_:Exception){return emptyList()}
+        }
+        if(!f.isFile)return emptyList()
+        val result=ArrayList<GeoPoint>()
+        try{
+            f.useLines { lines ->
+                lines.drop(1).take(7000).forEach {row->
+                    val cols=row.split(',')
+                    val lat=cols.getOrNull(1)?.toDoubleOrNull()
+                    val lon=cols.getOrNull(2)?.toDoubleOrNull()
+                    val acc=cols.getOrNull(3)?.toFloatOrNull()
+                    if(lat!=null&&lon!=null&&lat in -90.0..90.0&&lon in -180.0..180.0 &&
+                        acc!=null && acc>=0f && acc<=35f)result.add(GeoPoint(lat,lon))
+                }
+            }
+        }catch(_:Exception){return emptyList()}
+        return result
+    }
+
     fun gpx(c: Context): String? {
         val path = savedRoute(c) ?: return null
         val file = File(path)
