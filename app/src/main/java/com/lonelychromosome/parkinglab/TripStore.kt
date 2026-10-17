@@ -129,7 +129,12 @@ object TripStore {
                 .putString("trackLat", loc.latitude.toString())
                 .putString("trackLon", loc.longitude.toString())
                 .putLong("trackMono", mono)
-            if (d in 5f..90f && (speed >= 1.4f || d >= 12f)) {
+            // Never mistake noisy GPS jumps for 35 metres of actual riding.
+            // GNSS-reported speed AND a sufficiently accurate fix are needed.
+            val credibleRiding = loc.hasSpeed() && loc.speed.isFinite() &&
+                loc.speed >= 1.7f && loc.accuracy <= 20f &&
+                d >= max(5f,loc.accuracy * 0.55f) && d <= 90f
+            if (credibleRiding) {
                 edit.putFloat("metres", metres(c) + d)
             }
         }
