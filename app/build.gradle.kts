@@ -7,13 +7,13 @@ android {
   namespace = "com.lonelychromosome.parkinglab"
   compileSdk = 35
   defaultConfig {
-    applicationId = if (sideBySideFieldTest) "com.lonelychromosome.parkinglab.fieldtest.v13" else "com.lonelychromosome.parkinglab.fieldtest"
+    applicationId = if (sideBySideFieldTest) "com.lonelychromosome.parkinglab.fieldtest.v14" else "com.lonelychromosome.parkinglab.fieldtest"
     minSdk = 26
     targetSdk = 35
-    versionCode = 11
-    versionName = "1.3.0-stop-validation-gps-uncertainty"
+    versionCode = 12
+    versionName = "1.4.0-white-two-pins-distance"
   }
-  defaultConfig.manifestPlaceholders["APP_LABEL"] = if(sideBySideFieldTest) "Find My Bike REAL 1.3" else "Find My Bike REAL"
+  defaultConfig.manifestPlaceholders["APP_LABEL"] = if(sideBySideFieldTest) "Find My Bike · 2 điểm" else "Find My Bike REAL"
   defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = providers.environmentVariable("BPA_MAPS_API_KEY").orElse(providers.gradleProperty("BPA_MAPS_API_KEY")).orElse("NO_KEY").get()
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
