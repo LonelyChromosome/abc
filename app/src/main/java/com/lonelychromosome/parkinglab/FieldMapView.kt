@@ -62,7 +62,7 @@ class FieldMapView(ctx:Context) : View(ctx) {
         return path.zipWithNext().sumOf{(a,b)->hypot((a.x-b.x).toDouble(),(a.y-b.y).toDouble())}*scale
     }
     fun isCalibrated()=true
-    fun scaleLabel():String="0,385223 m/pixel · tham chiếu Google Maps z18 (sai khác kiểm tra ~3%)"
+    fun scaleLabel():String="Tỷ lệ tham chiếu 0,385223 m/px · CHƯA hiệu chuẩn vị trí tuyệt đối · kiểm tra GPS trên Google Maps"
     fun zoomIn(){zoom=(zoom*1.5f).coerceAtMost(12f);invalidate()}
     fun zoomOut(){zoom=(zoom/1.5f).coerceAtLeast(1f);invalidate()}
     fun reset(){zoom=1f;panX=0f;panY=0f;invalidate()}
