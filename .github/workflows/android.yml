@@ -29,7 +29,7 @@ jobs:
       - name: Build debug APK
         env:
           BPA_MAPS_API_KEY: ${{ secrets.BPA_MAPS_API_KEY }}
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug --no-daemon --stacktrace -PBPA_SIDE_BY_SIDE=true
       - uses: actions/upload-artifact@v4
         with:
           name: FindMyBike-REAL-FieldTest
