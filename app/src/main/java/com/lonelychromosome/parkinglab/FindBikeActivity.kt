@@ -161,7 +161,7 @@ class FindBikeActivity : Activity() {
         map.setGps(current,bike,navigating)
         start.isEnabled=bike!=null
         stop.visibility=if(NavState.active(this)) View.VISIBLE else View.GONE
-        calibrate.text="TRACE TÍM: GPS ghi lại (${recorded.size} điểm) · XANH: tuyến về xe\n" +
+        calibrate.text="TÍM: GPS gốc chưa khớp bản đồ (${recorded.size} điểm) · XANH: tuyến ước lượng\n" +
             map.scaleLabel()
         if(bike==null){
             info.text=if(TripStore.running(this))
