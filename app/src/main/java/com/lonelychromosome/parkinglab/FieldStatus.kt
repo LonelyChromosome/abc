@@ -43,7 +43,7 @@ object FieldStatus {
     fun tracking(c: Context) =
         publish(c, "TRACKING", "Đã vào vùng · ghi GPS thật và phát hiện dừng xe.", true)
     fun stopped(c: Context, steps: Int, seconds: Long) =
-        publish(c, "XÁC MINH ĐI BỘ", "Xe vừa dừng · $steps bước, $seconds/10 giây.", true)
+        publish(c, "NGHI DỪNG XE", "Chưa xác nhận đỗ. $steps bước / $seconds giây; cần GPS xác nhận đã rời xe.", true)
     fun tracked(c: Context, accuracy: Float) =
         publish(c, "TRACKED", "Đã lưu tọa độ xe từ GPS/trace. Mở app → Dẫn đường (sai số GPS cuối $accuracy m).")
     fun navigating(c: Context, remain: Float, accuracy: Float) =
