@@ -294,12 +294,13 @@ class MainActivity : Activity() {
         when (TripStore.stage(this)) {
             TripStore.TRACK -> {
                 stageLabel.text = "ĐANG TRACKING"
-                explanation.text = "Đang quan sát xe. Dừng ổn định khoảng 6 giây sẽ chuyển sang xác minh đi bộ."
+                explanation.text = "Đang ghi GPS. Mỗi lần dừng chỉ tạo ứng viên; chạy tiếp sẽ bỏ ứng viên cũ. Đã xét ${TripStore.stopsObserved(this)} điểm nghi dừng."
                 mainButton.text = "LƯU ĐIỂM ĐỖ THỦ CÔNG"
             }
             TripStore.STOP -> {
-                stageLabel.text = "XE ĐÃ DỪNG · XÁC MINH"
-                explanation.text = "Bước chân: ${TripStore.stepCount(this)} · liên tục: ${TripStore.walkElapsed(this)}s/10s. Khi đủ sẽ tự lưu vị trí xe trước lúc đi bộ."
+                stageLabel.text = "NGHI DỪNG XE · CHƯA CHỐT"
+                explanation.text = "Ứng viên dừng #${TripStore.stopsObserved(this)} · ${TripStore.stepCount(this)} bước / ${TripStore.walkElapsed(this)}s · xác nhận GPS rời xe ${TripStore.departureFixes(this)}/2.\n" +
+                    TripStore.departureNote(this)
                 mainButton.text = "LƯU ĐIỂM ĐỖ THỦ CÔNG"
             }
             TripStore.SAVED -> {
