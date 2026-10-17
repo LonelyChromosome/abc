@@ -11,7 +11,7 @@ import kotlin.math.hypot
  * Approved map size 1448 x 1086. Scale 0.385223m/pixel.
  * Transformation is a SIMILARITY (constant scale + rotation + translation).
  * Pixel origin derives from a mapped building reference, not a true surveyed GNSS point.
- * The ~3% reference-scale uncertainty must not be hidden from the field test.
+ * Absolute alignment with real-world buildings is UNVERIFIED. GPS noise also shifts traces.
  */
 class FieldCalibration(private val context: Context) {
     companion object {
