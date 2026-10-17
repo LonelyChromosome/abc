@@ -158,6 +158,7 @@ class FindBikeActivity : Activity() {
         val bike=if(!TripStore.running(this) && lat!=null&&lon!=null) GeoPoint(lat,lon) else null
         val recorded=TripStore.traceForMap(this)
         map.setTrace(recorded)
+        map.setAccuracyMetres(if(navigating)NavState.accuracy(this) else TripStore.accuracy(this))
         map.setGps(current,bike,navigating)
         start.isEnabled=bike!=null
         stop.visibility=if(NavState.active(this)) View.VISIBLE else View.GONE
