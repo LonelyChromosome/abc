@@ -23,6 +23,11 @@ class FieldMapView(ctx:Context) : View(ctx) {
         trace=points.takeLast(3500).map { calibration.point(it.lat,it.lon) }
         invalidate()
     }
+    private var currentAccuracyMetres=Float.NaN
+    fun setAccuracyMetres(metres:Float) {
+        currentAccuracyMetres=metres
+        invalidate()
+    }
     private var angle=0f
     private var zoom=1f
     private var panX=0f
@@ -98,12 +103,25 @@ class FieldMapView(ctx:Context) : View(ctx) {
             for(p in trace) {
                 if(!calibration.validPixel(p)) {inSegment=false;previous=null;continue}
                 // Don't connect over large GPS jumps and draw a fake passage through buildings.
-                if(!inSegment || (previous!=null && hypot(p.x-previous.x,p.y-previous.y)*0.385223f>35f)) {
+                // Two sparse GPS fixes do not prove a straight route through gray buildings.
+                // Break uncertain lines instead of fabricating an indoor trajectory.
+                if(!inSegment || previous==null ||
+                   hypot(p.x-previous.x,p.y-previous.y)*0.385223f>35f ||
+                   crossesBuilding(previous,p)) {
                     gpsLine.moveTo(p.x,p.y)
                 } else gpsLine.lineTo(p.x,p.y)
                 inSegment=true;previous=p
             }
             c.drawPath(gpsLine,paint)
+            // Every raw GPS observation stays visible, including mismatched points.
+            // Never silently snap these measurements onto a road or building.
+            paint.style=Paint.Style.FILL
+            paint.color=Color.argb(170,128,52,204)
+            val sampleStride=max(1,trace.size/250)
+            for(i in trace.indices step sampleStride){
+                val fix=trace[i]
+                if(calibration.validPixel(fix)) c.drawCircle(fix.x,fix.y,2.3f/factor(),paint)
+            }
             val last=trace.lastOrNull()
             if(last!=null && calibration.validPixel(last)) dot(c,last,Color.rgb(128,52,204),4.2f/factor())
         }
@@ -120,7 +138,19 @@ class FieldMapView(ctx:Context) : View(ctx) {
             c.drawPath(p,paint);paint.pathEffect=null
         }
         val radius=8f/factor()
-        dot(c,person?.let{calibration.point(it.lat,it.lon)},Color.rgb(12,178,235),radius)
+        val currentPoint=person?.let{calibration.point(it.lat,it.lon)}
+        if(currentPoint!=null && calibration.validPixel(currentPoint) &&
+            currentAccuracyMetres.isFinite() && currentAccuracyMetres>0f) {
+            paint.style=Paint.Style.FILL
+            paint.color=Color.argb(24,12,178,235)
+            val radiusPx=(currentAccuracyMetres/calibration.metrePerPixel()).toFloat()
+            c.drawCircle(currentPoint.x,currentPoint.y,radiusPx,paint)
+            paint.style=Paint.Style.STROKE
+            paint.color=Color.argb(115,12,178,235)
+            paint.strokeWidth=1.5f/factor()
+            c.drawCircle(currentPoint.x,currentPoint.y,radiusPx,paint)
+        }
+        dot(c,currentPoint,Color.rgb(12,178,235),radius)
         dot(c,parked?.let{calibration.point(it.lat,it.lon)},Color.rgb(250,174,47),radius)
         c.restore()
 
@@ -186,6 +216,18 @@ class FieldMapView(ctx:Context) : View(ctx) {
                 }
             }
         }
+    }
+    /** Rendering quality guard, NOT proof that GPS actually followed a given walkway. */
+    private fun crossesBuilding(a:PointF,b:PointF):Boolean {
+        if(!calibration.validPixel(a) || !calibration.validPixel(b))return true
+        val count=max(1,(hypot(b.x-a.x,b.y-a.y)/3f).toInt())
+        for(i in 0..count) {
+            val t=i.toFloat()/count
+            val x=((a.x+(b.x-a.x)*t)/mapWidth*nX).toInt().coerceIn(0,nX-1)
+            val y=((a.y+(b.y-a.y)*t)/mapHeight*nY).toInt().coerceIn(0,nY-1)
+            if(blocked[y*nX+x])return true
+        }
+        return false
     }
     private fun pathfind(a:PointF,b:PointF):List<PointF> {
         if(bitmap==null)return emptyList()
