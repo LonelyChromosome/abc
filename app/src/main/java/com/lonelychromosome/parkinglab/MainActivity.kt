@@ -93,7 +93,7 @@ class MainActivity : Activity() {
         root.addView(mainButton, margin(18))
         cancelButton = button("HỦY TRACKING") { cancel() }
         root.addView(cancelButton, margin(9))
-        mapButton = button("DẪN ĐƯỜNG · VỊ TRÍ GPS → TRACKED", true) { launchFindBike() }
+        mapButton = button("XEM VỊ TRÍ XE · KHOẢNG CÁCH", true) { launchFindBike() }
         root.addView(mapButton, margin(22))
         gpxButton = button("XUẤT TRACK GPX") { exportGpx() }
         root.addView(gpxButton, margin(8))
@@ -304,7 +304,7 @@ class MainActivity : Activity() {
                 mainButton.text = "LƯU ĐIỂM ĐỖ THỦ CÔNG"
             }
             TripStore.SAVED -> {
-                stageLabel.text = if(NavState.endedAt(this)>TripStore.parkTime(this)) "END · ĐÃ KẾT THÚC DẪN ĐƯỜNG" else "TRACKED · ĐÃ LƯU VỊ TRÍ XE"
+                stageLabel.text = "TRACKED · ĐÃ LƯU VỊ TRÍ XE"
                 explanation.text = (if (TripStore.autoSaved(this)) "Tự xác minh đi bộ 10s. " else "Lưu thủ công. ") +
                     "Lưu lúc ${TripStore.savedDate(this)}"
                 mainButton.text = "BẮT ĐẦU HÀNH TRÌNH MỚI"
@@ -318,8 +318,8 @@ class MainActivity : Activity() {
         cancelButton.visibility = if (TripStore.running(this)) View.VISIBLE else View.GONE
         mapButton.visibility = if (TripStore.running(this) || TripStore.hasSaved(this)) View.VISIBLE else View.GONE
         mapButton.text = if (TripStore.running(this))
-            "XEM TRACE GPS TRỰC TIẾP TRÊN MAP"
-        else "DẪN ĐƯỜNG · GPS HIỆN TẠI → TRACKED"
+            "XEM TRẠNG THÁI GPS"
+        else "XEM XE ĐỖ · KHOẢNG CÁCH"
         gpxButton.visibility = if (TripStore.savedRoute(this) != null) View.VISIBLE else View.GONE
         val gpsAge = if (TripStore.lastFix(this) == 0L) "Chưa có"
             else "${((System.currentTimeMillis() - TripStore.lastFix(this)) / 1000L).coerceAtLeast(0L)}s trước"
