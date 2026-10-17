@@ -8,6 +8,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /** GPS route and last motorbike stop are kept distinct from the subsequent walking route. */
 object TripStore {
@@ -35,6 +37,13 @@ object TripStore {
     fun savedRoute(c: Context) = p(c).getString("savedRoute", null)
     fun autoSaved(c: Context) = p(c).getBoolean("autoSaved", false)
     fun stepCount(c: Context) = p(c).getInt("steps", 0)
+    fun stopsObserved(c: Context) = p(c).getInt("stopCandidatesSeen", 0)
+    fun departureFixes(c: Context) = p(c).getInt("departureFixes", 0)
+    fun departureNote(c: Context): String = when {
+        stepCount(c) < 8 || walkElapsed(c) < 10L -> "Chưa đủ bước chân liên tục; vẫn chỉ là điểm nghi dừng."
+        departureFixes(c) < 2 -> "Đủ bước nhưng thiếu GPS xác nhận đã đi bộ rời xe; chưa tự lưu."
+        else -> "Đang xác minh chất lượng GPS trước khi chốt."
+    }
     fun walkElapsed(c: Context): Long {
         val start = p(c).getLong("walkStartMono", 0L)
         return if (start == 0L) 0L else ((SystemClock.elapsedRealtime() - start) / 1000L).coerceAtLeast(0L)
@@ -52,7 +61,11 @@ object TripStore {
             .remove("trackMono").remove("fixMono").remove("stillLat").remove("stillLon")
             .remove("stillMono").remove("parkCandidateLat").remove("parkCandidateLon")
             .remove("parkCandidateWall").remove("walkStartMono").remove("walkStartWall")
-            .remove("stepLastMono").remove("message").remove("lastFix").apply()
+            .remove("stepLastMono").remove("message").remove("lastFix")
+            .remove("walkOriginLat").remove("walkOriginLon")
+            .remove("candidateAccuracy").remove("rideEvidence")
+            .remove("departureFixes").remove("lastDepartureMono")
+            .putInt("stopCandidatesSeen", 0).apply()
     }
     @Synchronized fun cancel(c: Context) {
         active(c).delete()
@@ -128,7 +141,9 @@ object TripStore {
             else distance(stillLat, stillLon, loc.latitude, loc.longitude)
 
         if (stage(c) == TRACK) {
-            if (speed > 2.0f || (stillLat != null && movedFromStill > 12f)) {
+            // A six-second stationary event is a hypothesis, never a confirmed park.
+            val tolerance = max(10f, min(22f, loc.accuracy * 0.7f))
+            if (speed > 2.0f || (stillLat != null && movedFromStill > tolerance)) {
                 edit.putString("stillLat", loc.latitude.toString())
                     .putString("stillLon", loc.longitude.toString())
                     .putLong("stillMono", mono)
@@ -137,26 +152,56 @@ object TripStore {
                     .putString("stillLon", loc.longitude.toString())
                     .putLong("stillMono", mono)
             } else if (metres(c) >= 35f && speed < 1.4f &&
-                mono - stillStart >= 6_000L) {
-                // Freeze the bike-stop candidate BEFORE the user walks away.
+                       mono - stillStart >= 6_000L) {
                 edit.putString("stage", STOP)
                     .putString("parkCandidateLat", stillLat.toString())
                     .putString("parkCandidateLon", stillLon.toString())
+                    .putFloat("candidateAccuracy", loc.accuracy)
                     .putLong("parkCandidateWall", System.currentTimeMillis())
-                    .putInt("steps", 0)
+                    .putInt("stopCandidatesSeen", prefs.getInt("stopCandidatesSeen",0)+1)
+                    .putInt("steps", 0).putInt("departureFixes", 0).putInt("rideEvidence", 0)
+                    .remove("lastDepartureMono").remove("walkOriginLat").remove("walkOriginLon")
                     .remove("walkStartMono").remove("walkStartWall").remove("stepLastMono")
             }
         } else {
-            // Movement of a motorcycle is much faster than walking.
-            // Do NOT cancel a stop just because the pedestrian leaves the candidate by 15m.
-            val stepLast = prefs.getLong("stepLastMono", 0L)
-            if (speed > 5f && (stepLast == 0L || mono - stepLast > 4_000L)) {
-                edit.putString("stage", TRACK).putString("stillLat", loc.latitude.toString())
-                    .putString("stillLon", loc.longitude.toString())
-                    .putLong("stillMono", mono)
+            // Slow riding in the parking lot must revoke the previous candidate.
+            val candidateLat=num(c,"parkCandidateLat")
+            val candidateLon=num(c,"parkCandidateLon")
+            val lastStep=prefs.getLong("stepLastMono",0L)
+            val stepping=lastStep>0 && mono>=lastStep && mono-lastStep<=4_000L
+            val away=if(candidateLat!=null && candidateLon!=null)
+                distance(candidateLat,candidateLon,loc.latitude,loc.longitude) else 0f
+            val ride=(speed>3.3f) ||
+                (speed>2.2f && !stepping) ||
+                (away>max(17f,loc.accuracy+5f) && !stepping)
+            val rideFixes=if(ride) prefs.getInt("rideEvidence",0)+1 else 0
+            edit.putInt("rideEvidence",rideFixes)
+            if(rideFixes>=2) {
+                edit.putString("stage", TRACK)
+                    .putString("stillLat",loc.latitude.toString())
+                    .putString("stillLon",loc.longitude.toString())
+                    .putLong("stillMono",mono)
                     .remove("parkCandidateLat").remove("parkCandidateLon")
-                    .remove("parkCandidateWall").remove("walkStartMono")
-                    .remove("walkStartWall").remove("stepLastMono").putInt("steps", 0)
+                    .remove("parkCandidateWall").remove("candidateAccuracy")
+                    .remove("walkOriginLat").remove("walkOriginLon")
+                    .remove("walkStartMono").remove("walkStartWall")
+                    .remove("stepLastMono").remove("lastDepartureMono")
+                    .putInt("steps",0).putInt("departureFixes",0).putInt("rideEvidence",0)
+            } else {
+                val originLat=num(c,"walkOriginLat")
+                val originLon=num(c,"walkOriginLon")
+                val originGap=if(originLat!=null && originLon!=null)
+                    distance(originLat,originLon,loc.latitude,loc.longitude) else 0f
+                val pedestrianFix=stepping && loc.accuracy<=20f && speed<2.7f &&
+                    away>=max(12f,min(24f,loc.accuracy*0.95f)) &&
+                    originGap>=max(7f,loc.accuracy*0.5f)
+                val prev=prefs.getLong("lastDepartureMono",0L)
+                if(pedestrianFix && (prev==0L || mono-prev>=1_800L)) {
+                    edit.putInt("departureFixes",min(10,prefs.getInt("departureFixes",0)+1))
+                        .putLong("lastDepartureMono",mono)
+                } else if(!pedestrianFix && loc.accuracy<=20f) {
+                    edit.putInt("departureFixes",0).remove("lastDepartureMono")
+                }
             }
         }
         edit.apply()
@@ -171,12 +216,23 @@ object TripStore {
         val fresh = previous == 0L || sensorMonoMs < previous || sensorMonoMs - previous > 3_500L
         val first = if (fresh) sensorMonoMs else if (start > 0L) start else sensorMonoMs
         val steps = if (fresh) 1 else prefs.getInt("steps", 0) + 1
-        prefs.edit().putLong("stepLastMono", sensorMonoMs)
+        val editor = prefs.edit().putLong("stepLastMono", sensorMonoMs)
             .putLong("walkStartMono", first)
             .putLong("walkStartWall", System.currentTimeMillis() - (sensorMonoMs - first))
-            .putInt("steps", steps).apply()
-        // At least 10 actual seconds of consecutive step events + 8 footsteps.
-        return sensorMonoMs - first >= 10_000L && steps >= 8 && save(c, true)
+            .putInt("steps", steps)
+        if(fresh) {
+            latitude(c)?.let{editor.putString("walkOriginLat",it.toString())}
+            longitude(c)?.let{editor.putString("walkOriginLon",it.toString())}
+            editor.putInt("departureFixes",0).remove("lastDepartureMono")
+        }
+        editor.apply()
+        val lastDeparture=prefs.getLong("lastDepartureMono",0L)
+        val confirmedByGps=prefs.getInt("departureFixes",0)>=2 &&
+            lastDeparture>0 && sensorMonoMs>=lastDeparture &&
+            sensorMonoMs-lastDeparture<=6_000L &&
+            prefs.getFloat("candidateAccuracy",35f)<=20f && accuracy(c)<=20f
+        return sensorMonoMs-first>=10_000L && steps>=8 &&
+            confirmedByGps && save(c,true)
     }
 
     /** Reverse-scan the recorded stop segment to exclude any subsequently walked GPS fixes. */
@@ -195,7 +251,8 @@ object TripStore {
             val lat = fields[1].toDoubleOrNull() ?: continue
             val lon = fields[2].toDoubleOrNull() ?: continue
             val speed = fields[4].toFloatOrNull() ?: continue
-            if (time > end) continue
+            val gpsAccuracy = fields[3].toFloatOrNull() ?: continue
+            if (time > end || gpsAccuracy > 20f) continue
             // Prefer the low-speed cluster immediately before walking; reject far points.
             if (speed <= 1.7f && distance(candidateLat, candidateLon, lat, lon) <= 18f) {
                 nearby.add(lat to lon)
