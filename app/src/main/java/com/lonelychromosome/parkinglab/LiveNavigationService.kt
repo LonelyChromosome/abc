@@ -12,8 +12,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 
-/** Separate foreground GPS feed for walking navigation AFTER TRACKED.
- * The earlier motorcycle tracking service is not restarted or overwritten.
+/** GPS ONLY: feed current position while the simple two-pin view is visible.
+ * No directions, routing or movement simulation. Never overwrites the parking record.
  */
 class LiveNavigationService: Service(),LocationListener {
     companion object {
@@ -28,7 +28,7 @@ class LiveNavigationService: Service(),LocationListener {
         super.onCreate()
         location=getSystemService(LOCATION_SERVICE) as LocationManager
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL,"Find My Bike · GPS dẫn đường",NotificationManager.IMPORTANCE_LOW))
+            NotificationChannel(CHANNEL,"Find My Bike · vị trí hiện tại",NotificationManager.IMPORTANCE_LOW))
     }
     private fun notification(text:String):Notification {
         val open=PendingIntent.getActivity(this,16,
@@ -36,7 +36,7 @@ class LiveNavigationService: Service(),LocationListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this,CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_timer)
-            .setContentTitle("Find My Bike · DẪN ĐƯỜNG REAL GPS")
+            .setContentTitle("Find My Bike · vị trí hiện tại")
             .setContentText(text).setContentIntent(open)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setOnlyAlertOnce(true).setOngoing(true).build()
@@ -44,7 +44,7 @@ class LiveNavigationService: Service(),LocationListener {
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         if(intent?.action==END){
             NavState.ended(this)
-            FieldStatus.ended(this)
+            if(TripStore.hasSaved(this))FieldStatus.tracked(this,TripStore.accuracy(this))
             shutdown()
             return START_NOT_STICKY
         }
@@ -62,10 +62,10 @@ class LiveNavigationService: Service(),LocationListener {
             else startForeground(ID,notification("Đang chờ GPS thật..."))
             location.requestLocationUpdates(LocationManager.GPS_PROVIDER,2000L,0f,this)
             startedGps=true
-            FieldStatus.publish(this,"DẪN ĐƯỜNG","Đang lấy vị trí hiện tại · chờ GPS thật",true)
+            FieldStatus.publish(this,"XEM VỊ TRÍ","Đang lấy GPS thật để đo khoảng cách tới xe",true)
         }catch(ex:Exception){
             NavState.ended(this)
-            FieldStatus.error(this,"Không thể khởi động dẫn đường: ${ex.javaClass.simpleName}")
+            FieldStatus.error(this,"Không thể khởi động GPS: ${ex.javaClass.simpleName}")
             shutdown()
             return START_NOT_STICKY
         }
@@ -79,12 +79,12 @@ class LiveNavigationService: Service(),LocationListener {
         val b=TripStore.parkLon(this)?:return
         val remaining=FloatArray(1)
         Location.distanceBetween(fix.latitude,fix.longitude,a,b,remaining)
-        val detail="Cách vị trí TRACKED ~${remaining[0].toInt()} m (đường chim bay) · GPS ±${fix.accuracy.toInt()} m"
+        val detail="Cách xe ~${remaining[0].toInt()} m (đường chim bay) · GPS ±${fix.accuracy.toInt()} m"
         getSystemService(NotificationManager::class.java).notify(ID,notification(detail))
-        FieldStatus.publish(this,"DẪN ĐƯỜNG",detail,true)
+        FieldStatus.publish(this,"KHOẢNG CÁCH",detail,true)
     }
     override fun onProviderDisabled(provider:String){
-        FieldStatus.error(this,"GPS bị tắt khi dẫn đường. Mở Vị trí để tiếp tục.")
+        FieldStatus.error(this,"GPS đang tắt. Bật Vị trí để đo khoảng cách.")
     }
     private fun shutdown(){
         if(startedGps){try{location.removeUpdates(this)}catch(_:Exception){};startedGps=false}
