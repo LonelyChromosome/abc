@@ -7,6 +7,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -329,21 +330,45 @@ object TripStore {
     fun gpx(c: Context): String? {
         val path = savedRoute(c) ?: return null
         val file = File(path)
-        if (!file.exists() || !file.canonicalPath.startsWith(folder(c).canonicalPath + File.separator)) return null
+        if (!file.exists() ||
+            !file.canonicalPath.startsWith(folder(c).canonicalPath + File.separator)) return null
+        val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        iso.timeZone = TimeZone.getTimeZone("UTC")
         val buffer = StringBuilder()
         file.useLines { lines ->
             lines.drop(1).forEach { row ->
                 val x = row.split(',')
+                val ts = x.getOrNull(0)?.toLongOrNull()
                 val lat = x.getOrNull(1)?.toDoubleOrNull()
                 val lon = x.getOrNull(2)?.toDoubleOrNull()
-                if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
+                val acc = x.getOrNull(3)?.toFloatOrNull()
+                val speed = x.getOrNull(4)?.toFloatOrNull()
+                if (lat != null && lon != null &&
+                    lat in -90.0..90.0 && lon in -180.0..180.0) {
                     buffer.append("<trkpt lat=\"").append(lat)
-                        .append("\" lon=\"").append(lon).append("\"/>\n")
+                        .append("\" lon=\"").append(lon).append("\">")
+                    if (ts != null && ts > 0L) {
+                        buffer.append("<time>").append(iso.format(Date(ts))).append("</time>")
+                    }
+                    if ((acc != null && acc.isFinite()) ||
+                        (speed != null && speed.isFinite())) {
+                        buffer.append("<extensions>")
+                        if (acc != null && acc.isFinite())
+                            buffer.append("<fmb:accuracy_m>").append(acc)
+                                .append("</fmb:accuracy_m>")
+                        if (speed != null && speed.isFinite())
+                            buffer.append("<fmb:speed_mps>").append(speed)
+                                .append("</fmb:speed_mps>")
+                        buffer.append("</extensions>")
+                    }
+                    buffer.append("</trkpt>\n")
                 }
             }
         }
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
-            "<gpx version=\"1.1\" creator=\"BPA Parking Lab\" xmlns=\"http://www.topografix.com/GPX/1/1\">" +
+            "<gpx version=\"1.1\" creator=\"BPA Parking Lab\" " +
+            "xmlns=\"http://www.topografix.com/GPX/1/1\" " +
+            "xmlns:fmb=\"urn:lonelychromosome:findmybike:gps\">" +
             "<trk><trkseg>" + buffer + "</trkseg></trk></gpx>"
     }
 }
