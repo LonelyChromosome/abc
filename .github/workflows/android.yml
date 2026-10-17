@@ -26,6 +26,30 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Restore pinned campus map asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://raw.githubusercontent.com/LonelyChromosome/DemoF3/f40409329c74585e1c2468e2803a740b46006dcf/findbike_binary/v02_update.tar.gz"
+          curl -fLSs --retry 3 "$URL" -o /tmp/fmb-map-resource.tar.gz
+          echo "7370507322a17693892417da2cfae182527b6393531c430381cb649724b25d9a  /tmp/fmb-map-resource.tar.gz" | sha256sum -c -
+          python - <<'PY'
+          import tarfile
+          from pathlib import Path
+          with tarfile.open('/tmp/fmb-map-resource.tar.gz','r:gz') as archive:
+              matches=[m for m in archive.getmembers()
+                       if m.isfile() and m.name.endswith('/map_native.webp')]
+              if len(matches)!=1: raise RuntimeError('Source map missing or ambiguous')
+              source=archive.extractfile(matches[0])
+              if source is None: raise RuntimeError('Cannot read map')
+              b=source.read()
+          if len(b)<100_000 or b[:4]!=b'RIFF' or b[8:12]!=b'WEBP':
+              raise RuntimeError('Map data invalid')
+          out=Path('app/src/main/assets/approved_map.webp')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_bytes(b)
+          print('Bundled approved map',len(b),'bytes')
+          PY
       - name: Build debug APK
         env:
           BPA_MAPS_API_KEY: ${{ secrets.BPA_MAPS_API_KEY }}
