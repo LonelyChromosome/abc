@@ -177,7 +177,8 @@ object TripStore {
             val away=if(candidateLat!=null && candidateLon!=null)
                 distance(candidateLat,candidateLon,loc.latitude,loc.longitude) else 0f
             val ride=(speed>3.3f) ||
-                (speed>2.2f && !stepping) ||
+                (!stepping && loc.accuracy<=20f && speed>1.6f &&
+                    away>max(9f,loc.accuracy*0.65f)) ||
                 (away>max(17f,loc.accuracy+5f) && !stepping)
             val rideFixes=if(ride) prefs.getInt("rideEvidence",0)+1 else 0
             edit.putInt("rideEvidence",rideFixes)
