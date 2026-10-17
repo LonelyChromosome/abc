@@ -121,7 +121,7 @@ class TrackingService : Service(), LocationListener, SensorEventListener {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val info = if (TripStore.stage(this) == TripStore.STOP)
-            "Đã dừng xe · chờ 10 giây bước chân (${TripStore.stepCount(this)} bước)"
+            "Nghi dừng #${TripStore.stopsObserved(this)} · ${TripStore.stepCount(this)} bước · GPS rời xe ${TripStore.departureFixes(this)}/2"
         else "Đang ghi hành trình · ${TripStore.count(this)} điểm GPS"
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_timer)
