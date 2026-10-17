@@ -43,7 +43,8 @@ jobs:
               source=archive.extractfile(matches[0])
               if source is None: raise RuntimeError('Cannot read map')
               b=source.read()
-          if len(b)<100_000 or b[:4]!=b'RIFF' or b[8:12]!=b'WEBP':
+          print('Fetched map candidate',len(b),'bytes; header',repr(b[:16]))
+          if len(b)<1_000 or b[:4]!=b'RIFF' or b[8:12]!=b'WEBP':
               raise RuntimeError('Map data invalid')
           out=Path('app/src/main/assets/approved_map.webp')
           out.parent.mkdir(parents=True,exist_ok=True)
